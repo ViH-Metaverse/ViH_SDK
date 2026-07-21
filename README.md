@@ -28,16 +28,16 @@ dependencyResolutionManagement {
 }
 ```
 
-**2. Dependency** — in your module `build.gradle(.kts)` (replace `<tag>` with the released
-git tag, e.g. `1.0.1`):
+**2. Dependency** — in your module `build.gradle(.kts)`:
 
 ```groovy
-implementation "com.github.ViH-Metaverse:ViH_SDK:<tag>"
+implementation "com.github.ViH-Metaverse.ViH_SDK:vih-sdk-staging:1.0.1"
 ```
 
-> The exact coordinate is shown on the JitPack build page for this repo. The API base URL is
-> compiled into the artifact (`https://api.platform.vihresearchlabs.ai/`) — there is no
-> runtime override.
+> Note the groupId ends in `.ViH_SDK` — JitPack appends the repo name for multi-module
+> builds. The API base URL is compiled into the artifact
+> (`https://api.platform.vihresearchlabs.ai/`); there is **no** runtime override. The
+> `vih-sdk` artifact targets the same host, so either works.
 
 **3. Launch** — from any click listener:
 
