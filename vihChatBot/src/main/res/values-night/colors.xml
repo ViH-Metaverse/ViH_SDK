@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark-mode overrides for the system-theme-aware surfaces & text.
+         Only these semantic colors flip; tenant/brand colors are untouched. -->
+    <color name="vih_screen_bg">#121212</color>
+    <color name="vih_surface">#1E1E1E</color>
+    <color name="vih_text_primary">#ECECEC</color>
+    <color name="vih_text_secondary">#A9AEBC</color>
+</resources>

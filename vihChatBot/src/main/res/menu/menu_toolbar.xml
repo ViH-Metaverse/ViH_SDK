@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/menu_main_setting"
+        android:icon="@drawable/ic_menu_chat"
+        android:title=""
+        app:showAsAction="always">
+        <menu>
+            <item
+                android:id="@+id/menu_chat_view_contact"
+                android:title="View Contact" />
+
+            <item
+                android:id="@+id/menu_chat_search"
+                android:title="Search Messages" />
+            <item
+                android:id="@+id/menu_mute_noti"
+                android:title="Mute Notifications" />
+
+        </menu>
+    </item>
+
+</menu>

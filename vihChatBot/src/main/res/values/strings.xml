@@ -1,0 +1,25 @@
+<resources>
+
+    <string name="noti_channel_default">Primary Channel</string>
+    <string name="noti_channel_second">Secondary Channel</string>
+    <string name="settings">Settings</string>
+    <string name="chats">Chats</string>
+    <string name="discover">Discover</string>
+
+    <string name="all">All</string>
+    <string name="delivered">DELIVERED</string>
+    <string name="recieved">RECIEVED</string>
+    <string name="cancelled">CANCELLED</string>
+
+
+    <!-- TODO: Remove or change this placeholder text -->
+    <string name="hello_blank_fragment">Hello blank fragment</string>
+    <string name="startChatPrivacyPolicy">Hello Nice to see you here! By pressing the "Start chat" button you agree to have your personal data processed as described in our Privacy Policy</string>
+
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="default_notification_channel_id">default_channel</string>
+
+    <string name="msg_token_fmt">FCM Token: %s</string>
+    <string name="view_more_notification_action_default">View More</string>
+</resources>

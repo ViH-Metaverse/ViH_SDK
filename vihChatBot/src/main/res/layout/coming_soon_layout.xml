@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/_50sdp"
+    android:orientation="vertical">
+
+
+    <FrameLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:layout_width="wrap_content"
+            android:layout_height="@dimen/_90sdp"
+            android:layout_gravity="center"
+            android:src="@drawable/coming_soon_border" />
+
+        <TextView
+            android:id="@+id/txtComingSoon"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_12sdp"
+            android:layout_gravity="center_horizontal"
+            android:fontFamily="@font/rubik_light"
+            android:text="Coming Soon"
+            android:textColor="#5C5E63"
+            android:textSize="@dimen/_20ssp" />
+    </FrameLayout>
+
+
+    <TextView
+        android:id="@+id/tvToolBarMain"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:fontFamily="@font/rubik_light"
+        android:gravity="center"
+        android:layout_marginHorizontal="@dimen/_40sdp"
+        android:text="Currently, no business are available on this app to chat with."
+        android:textColor="#5C5E63"
+        android:textSize="@dimen/_14ssp" />
+
+
+</LinearLayout>

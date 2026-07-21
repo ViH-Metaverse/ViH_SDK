@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- You can use gradient with below attributes-->
+    <gradient
+        android:angle="90"
+        android:centerColor="#7024F2"
+        android:endColor="#BD27F7"
+        android:startColor="#491DD2" />
+
+</shape>

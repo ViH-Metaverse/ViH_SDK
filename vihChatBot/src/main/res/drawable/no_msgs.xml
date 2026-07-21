@@ -1,0 +1,9 @@
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item android:drawable="@drawable/no_msgs_outline" />
+
+    <item
+        android:id="@+id/themed_lines"
+        android:drawable="@drawable/no_msgs_lines" />
+
+</layer-list>

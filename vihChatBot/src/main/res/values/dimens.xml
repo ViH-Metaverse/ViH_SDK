@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="padding_20">20dp</dimen>
+    <dimen name="waveform_width">4dp</dimen>
+    <dimen name="waveform_spacing">2dp</dimen>
+
+    <dimen name="default_item_width">25dp</dimen>
+    <dimen name="default_item_height">2dp</dimen>
+    <dimen name="default_item_divider_width">8dp</dimen>
+    <dimen name="_15sdp">18dp</dimen>
+    <dimen name="_10sdp">12dp</dimen>
+    <dimen name="_270sdp">270dp</dimen>
+    <dimen name="_1sdp">1.3dp</dimen>
+
+    <dimen name="default_stroke_width">7dp</dimen>
+    <dimen name="default_background_stroke_width">3dp</dimen>
+</resources>

@@ -1,0 +1,25 @@
+VihChatBotSDK — Proprietary License
+
+Copyright (c) 2026 VIH Research Labs. All rights reserved.
+
+This software and associated documentation files (the "SDK") are the confidential
+and proprietary property of VIH Research Labs. The SDK is licensed, not sold.
+
+Use of the SDK is permitted only by parties that have entered into a written
+integration or commercial agreement with VIH Research Labs, and solely in
+accordance with the terms of that agreement. Subject to those terms, an authorized
+integration partner is granted a non-exclusive, non-transferable, revocable license
+to incorporate the SDK into the partner's own iOS application.
+
+Except as expressly permitted by your agreement, you may NOT:
+  - redistribute, sublicense, sell, rent, or lease the SDK;
+  - reverse engineer, decompile, or disassemble the SDK;
+  - remove or alter any proprietary notices.
+
+THE SDK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL VIH RESEARCH LABS BE
+LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM, OUT OF, OR IN
+CONNECTION WITH THE SDK OR ITS USE.
+
+For licensing inquiries, contact your VIH Research Labs representative.

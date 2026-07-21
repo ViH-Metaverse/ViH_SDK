@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- OTP message bubble: light-purple fill + purple stroke, asymmetric corners matching the
+     received bubble (chat_bubble_receiver). Deliberately distinct from a normal/received bubble. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <corners
+        android:topLeftRadius="@dimen/_20sdp"
+        android:topRightRadius="@dimen/_20sdp"
+        android:bottomRightRadius="@dimen/_20sdp"
+        android:bottomLeftRadius="0dp" />
+    <solid android:color="#F3F2FE" />
+    <stroke android:width="1dp" android:color="#B9B6F5" />
+</shape>

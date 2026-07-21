@@ -1,0 +1,214 @@
+plugins {
+    id 'com.android.library'
+    id 'org.jetbrains.kotlin.android'
+    id 'maven-publish'
+    id 'signing'
+}
+
+android {
+    namespace 'com.vihmessenger.vihchatbot'
+    compileSdk 35
+
+    defaultConfig {
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName "1.0.0"
+
+        // AGP 8 strips VERSION_NAME/VERSION_CODE from library BuildConfig. Expose the
+        // SDK version explicitly so DeviceTokenRegistrar can include it in the
+        // session-registry payload (architecture §3.3).
+        buildConfigField "String", "SDK_VERSION", "\"1.0.0\""
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    flavorDimensions "environment"
+
+    productFlavors {
+        // SECURITY: Sensitive values loaded from local.properties (not committed to VCS)
+        def localProps = new Properties()
+        def localPropsFile = rootProject.file('local.properties')
+        if (localPropsFile.exists()) { localProps.load(new FileInputStream(localPropsFile)) }
+
+        prod {
+            dimension "environment"
+            buildConfigField "String", "API_BASE_URL", "\"${localProps.getProperty('PROD_API_BASE_URL', 'https://api.platform.vihresearchlabs.ai/')}\""
+            buildConfigField "String", "DEFAULT_HASHCODE", "\"${localProps.getProperty('PROD_DEFAULT_HASHCODE', '')}\""
+            buildConfigField "String", "BUGFENDER_KEY", "\"${localProps.getProperty('BUGFENDER_KEY', '')}\""
+            // Cognito (email-OTP auth) — per-environment pool config from local.properties.
+            buildConfigField "String", "COGNITO_USER_POOL_ID", "\"${localProps.getProperty('PROD_COGNITO_USER_POOL_ID', '')}\""
+            buildConfigField "String", "COGNITO_APP_CLIENT_ID", "\"${localProps.getProperty('PROD_COGNITO_APP_CLIENT_ID', '')}\""
+            buildConfigField "String", "COGNITO_REGION", "\"${localProps.getProperty('PROD_COGNITO_REGION', 'us-east-1')}\""
+        }
+        staging {
+            dimension "environment"
+            buildConfigField "String", "API_BASE_URL", "\"${localProps.getProperty('STAGING_API_BASE_URL', 'https://api.platform.vihresearchlabs.ai/')}\""
+            buildConfigField "String", "DEFAULT_HASHCODE", "\"${localProps.getProperty('STAGING_DEFAULT_HASHCODE', '')}\""
+            buildConfigField "String", "BUGFENDER_KEY", "\"${localProps.getProperty('BUGFENDER_KEY', '')}\""
+            // Cognito (email-OTP auth) — per-environment pool config from local.properties.
+            buildConfigField "String", "COGNITO_USER_POOL_ID", "\"${localProps.getProperty('STAGING_COGNITO_USER_POOL_ID', '')}\""
+            buildConfigField "String", "COGNITO_APP_CLIENT_ID", "\"${localProps.getProperty('STAGING_COGNITO_APP_CLIENT_ID', '')}\""
+            buildConfigField "String", "COGNITO_REGION", "\"${localProps.getProperty('STAGING_COGNITO_REGION', 'us-east-1')}\""
+        }
+    }
+
+    buildTypes {
+        release {
+        }
+    }
+    compileOptions {
+        // Required by AWS Amplify (Cognito) — backports java.time etc. to minSdk 24.
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+    buildFeatures {
+        viewBinding true
+        dataBinding = true
+        buildConfig = true
+    }
+
+    // Expose each flavor's release variant as a publishable component
+    // (a flavored library has no single 'release' component — only
+    // stagingRelease / prodRelease). Sources + javadoc jars are attached here.
+    publishing {
+        singleVariant('stagingRelease') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+        singleVariant('prodRelease') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.core:core-ktx:${core_ktx_version}"
+    implementation "androidx.appcompat:appcompat:${app_compat_version}"
+    implementation "com.google.android.material:material:${material_version}"
+    implementation "androidx.constraintlayout:constraintlayout:${constraint_layout_version}"
+    implementation "androidx.activity:activity:1.8.2"
+
+    //Retrofit
+    implementation "com.squareup.retrofit2:retrofit:${retrofit_version}"
+    implementation "com.google.code.gson:gson:${gson_version}"
+    implementation "com.squareup.retrofit2:converter-gson:${retrofit_converter_gson_version}"
+    implementation "com.squareup.okhttp3:logging-interceptor:${okhttp_interceptor_version}"
+
+    //Coroutines
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:${ktx_coroutines_core_version}"
+
+    implementation "com.intuit.sdp:sdp-android:${intuit_sdp_version}"
+    implementation "com.intuit.ssp:ssp-android:${intuit_ssp_version}"
+
+    // Lifecycle dependencies
+    implementation "androidx.lifecycle:lifecycle-runtime-ktx:${lifecycle_version}"
+    implementation "androidx.lifecycle:lifecycle-livedata-ktx:${lifecycle_version}"
+    implementation "androidx.lifecycle:lifecycle-viewmodel-ktx:${lifecycle_version}"
+
+    implementation 'androidx.legacy:legacy-support-v4:1.0.0'
+
+    implementation "com.airbnb.android:lottie:${lottieVersion}"
+    implementation "com.vanniktech:emoji-google-compat:0.18.0"
+    implementation 'com.github.massoudss:waveformSeekBar:5.0.2'
+    // Amplituda 2.3.1 ships 16 KB-page-aligned native libs (2.2.2 was 4 KB and failed
+    // Google Play's 16 KB requirement). 2.3.1 repackaged linc.com.amplituda ->
+    // com.linc.amplituda, which the old waveformSeekBar's File-based sampling can't find,
+    // so we decode samples ourselves via Amplituda directly and feed setSampleFrom(int[]).
+    implementation 'com.github.lincollincol:amplituda:2.3.1'
+    implementation 'com.vanniktech:emoji-google:0.18.0'
+    implementation 'androidx.emoji2:emoji2:1.4.0'
+    implementation 'com.google.firebase:firebase-messaging:23.1.0'
+    implementation 'com.bugfender.sdk:android:3.1.1'
+
+    // Security - EncryptedSharedPreferences
+    implementation "androidx.security:security-crypto:1.1.0-alpha06"
+
+    // AWS Amplify Auth (Cognito) — powers passwordless email-OTP sign-in.
+    implementation "com.amplifyframework:aws-auth-cognito:${amplify_version}"
+    implementation "com.amplifyframework:core-kotlin:${amplify_version}"
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:${desugar_jdk_libs_version}"
+
+    implementation 'io.michaelrocks:libphonenumber-android:8.12.44'
+    implementation 'com.github.joielechong:countrycodepicker:2.4.2'
+    implementation "androidx.lifecycle:lifecycle-process:2.8.3"
+
+    // Ultravox client SDK — powers the voicebot real-time audio call.
+    // Joined via the wss URL returned by /main/loan-approval/.
+    api "ai.fixie:ultravox-client-sdk:${ultravox_sdk_version}"
+}
+
+// Shared POM metadata for every flavor publication.
+def applyVihPom = { pom ->
+    pom.name = 'VihChatBot SDK'
+    pom.description = 'A chatbot SDK for Vih Messenger, providing a seamless chat experience.'
+    pom.url = 'https://github.com/vihmessenger/vih-sdk'
+    pom.licenses {
+        license {
+            name = 'The Apache License, Version 2.0'
+            url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+        }
+    }
+    pom.developers {
+        developer {
+            id = 'vihmessenger'
+            name = 'Karan'
+            email = 'pingatkaran@gmail.com'
+        }
+    }
+    pom.scm {
+        connection = 'scm:git:github.com/vihmessenger/vih-sdk.git'
+        developerConnection = 'scm:git:ssh://github.com/vihmessenger/vih-sdk.git'
+        url = 'https://github.com/vihmessenger/vih-sdk/tree/main'
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            // Both flavors now target https://api.platform.vihresearchlabs.ai/
+            // (prod host vihapi.plugseal.com retired — see local.properties).
+            stagingRelease(MavenPublication) {
+                from components.stagingRelease
+                groupId = 'io.github.vihmessenger'
+                artifactId = 'vih-sdk-staging'
+                version = '1.0.1'   // 1.0.0 (built against stagingnlp) is immutable — republish as 1.0.1
+                applyVihPom(pom)
+            }
+            prodRelease(MavenPublication) {
+                from components.prodRelease
+                groupId = 'io.github.vihmessenger'
+                artifactId = 'vih-sdk'
+                version = '1.0.10'  // next after published 1.0.9 (which pointed at retired plugseal host)
+                applyVihPom(pom)
+            }
+        }
+        repositories {
+            maven {
+                name = "Sonatype"
+                url = version.endsWith('SNAPSHOT') ?
+                        uri("https://s01.oss.sonatype.org/content/repositories/snapshots/") :
+                        uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
+
+                credentials {
+                    username = project.properties["ossrhUsername"]
+                    password = project.properties["ossrhPassword"]
+                }
+            }
+        }
+    }
+
+    signing {
+        // Maven Central requires GPG signatures, but JitPack / local publishToMavenLocal
+        // builds have no signing key and must not fail here. Only sign when Sonatype
+        // credentials are present (i.e. a real Central publish).
+        required { project.hasProperty('ossrhPassword') }
+        sign publishing.publications
+    }
+}

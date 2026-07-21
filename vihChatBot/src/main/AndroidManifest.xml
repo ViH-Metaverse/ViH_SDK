@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- SECURITY: Removed READ_PRIVILEGED_PHONE_STATE (system-only permission, never grantable to third-party apps) -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- Voicebot (LiveKit) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_REMOTE_MESSAGING" />
+
+
+    <queries>
+        <intent>
+            <action android:name="android.content.Intent.ACTION_VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.content.Intent.ACTION_VIEW" />
+            <data android:mimeType="application/*" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".AppController"
+        android:theme="@style/Theme.VihChatbot">
+
+        <activity
+            android:name=".ui.activity.CompanyProfileActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.activity.EditSettingsActivity"
+            android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <service
+            android:name=".services.MyFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+
+        <receiver
+            android:name=".services.MyFirebaseMessagingService$NotificationDismissedReceiver"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.activity.FullScreenViewActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ui.activity.VideoActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:exported="false"
+            android:screenOrientation="unspecified" />
+        <activity
+            android:name=".ui.activity.VoicebotActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.VihChatbot" />
+
+        <activity
+            android:name=".ui.activity.home.ChatActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden" >
+            <intent-filter>
+                <action android:name="OPEN_CHAT_ACTIVITY" /> <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+        <!-- SECURITY: DashBoardActivity set to exported=false to prevent unauthorized launches -->
+        <activity
+            android:name="com.vihmessenger.vihchatbot.ui.activity.home.DashBoardActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustPan" />
+        <activity
+            android:name=".ui.activity.splash.SplashActivity"
+            android:exported="false" />
+
+        <receiver
+            android:name=".services.MyFirebaseMessagingService$OtpCopyReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.vihmessenger.vihchatbot.services.COPY_OTP" />
+            </intent-filter>
+        </receiver>
+
+        <!-- SECURITY: ShortcutPinnedReceiver set to exported=false to prevent spoofing -->
+        <receiver
+            android:name=".services.ShortcutPinnedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.vihmessenger.vihchatbot.SHORTCUT_PINNED" />
+            </intent-filter>
+        </receiver>
+
+        <service
+            android:name=".services.OverlayService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="remoteMessaging" />
+    </application>
+
+</manifest>

@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/clAudioTemplate"
+    android:layout_width="@dimen/_230sdp"
+    android:layout_height="wrap_content"
+    android:background="#F5F6F7"
+    android:visibility="visible"
+    app:layout_constraintBottom_toBottomOf="parent"
+    app:layout_constraintEnd_toEndOf="parent"
+    app:layout_constraintStart_toStartOf="parent"
+    app:layout_constraintTop_toTopOf="parent">
+
+    <LinearLayout
+        android:id="@+id/audioDownloadTemplate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/_1sdp"
+        android:background="#F5F6F7"
+        android:orientation="horizontal"
+        android:padding="@dimen/_5sdp"
+        android:visibility="gone">
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/ivAudioDownload"
+            android:layout_width="@dimen/_30sdp"
+            android:layout_height="@dimen/_30sdp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginEnd="10dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="@dimen/_4sdp"
+            android:src="@drawable/ic_doc_dl"
+            android:visibility="visible" />
+
+        <FrameLayout
+            android:id="@+id/flAudioProgressCancel"
+            android:layout_width="@dimen/_30sdp"
+            android:layout_height="@dimen/_30sdp"
+            android:layout_gravity="center_vertical"
+            android:layout_marginEnd="10dp"
+            android:visibility="gone">
+
+            <com.vihmessenger.vihchatbot.utils.CircularProgressBar
+                android:id="@+id/audioCircularProgressBar"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:cpb_background_progressbar_color="#b6bbd8"
+                app:cpb_background_progressbar_width="3dp"
+                app:cpb_progress_direction="to_right"
+                app:cpb_progressbar_color="@color/primarycolor"
+                app:cpb_progressbar_width="5dp"
+                app:cpb_round_border="false" />
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/ivCancelAudioDownload"
+                android:layout_width="@dimen/_20sdp"
+                android:layout_height="@dimen/_20sdp"
+                android:layout_gravity="center"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:padding="@dimen/_2sdp"
+                android:src="@drawable/ic_cancel_download" />
+        </FrameLayout>
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginStart="@dimen/_5sdp"
+            android:layout_marginEnd="@dimen/_5sdp"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/tvAudioFileName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:fontFamily="@font/rubik_regular"
+                android:maxLength="12"
+                android:text="FileName.mp3"
+                android:textColor="@color/black"
+                android:textSize="@dimen/_10ssp" />
+
+            <TextView
+                android:id="@+id/tvAudioFileDetails"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/rubik_regular"
+                android:text="File details here"
+                android:textColor="@color/black"
+                android:textSize="@dimen/_8ssp" />
+        </LinearLayout>
+
+        <com.vihmessenger.vihchatbot.utils.CircleImageView
+            android:id="@+id/ivEndImg"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:src="@drawable/placeholder"
+            app:layout_constraintBottom_toBottomOf="@id/waveformSeekBar"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/waveformSeekBar"
+            app:layout_constraintTop_toTopOf="@id/waveformSeekBar" />
+    </LinearLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/clAudioPlayTemplate"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="@dimen/_5sdp">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/clPlayButton"
+            android:layout_width="wrap_content"
+            android:layout_height="0dp"
+            app:layout_constraintBottom_toBottomOf="@id/waveformSeekBar"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/waveformSeekBar">
+
+            <androidx.appcompat.widget.AppCompatImageView
+                android:id="@+id/ivPlay"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:scaleType="fitXY"
+                android:src="@drawable/ic_play_audio"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <com.masoudss.lib.WaveformSeekBar
+            android:id="@+id/waveformSeekBar"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/_30sdp"
+            android:layout_marginHorizontal="@dimen/_10sdp"
+            app:layout_constraintEnd_toStartOf="@+id/ivEndIcon"
+            app:layout_constraintStart_toEndOf="@id/clPlayButton"
+            app:layout_constraintTop_toTopOf="parent"
+            app:wave_background_color="#868686"
+            app:wave_corner_radius="@dimen/_2sdp"
+            app:wave_gap="@dimen/_2sdp"
+            app:wave_gravity="center"
+            app:wave_max_progress="100"
+            app:wave_min_height="@dimen/_4sdp"
+            app:wave_progress="33"
+            app:wave_progress_color="#000"
+            app:wave_width="2dp" />
+
+        <com.vihmessenger.vihchatbot.utils.CircleImageView
+            android:id="@+id/ivEndIcon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="8dp"
+            android:src="@drawable/placeholder"
+            app:layout_constraintBottom_toBottomOf="@id/waveformSeekBar"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/waveformSeekBar"
+            app:layout_constraintTop_toTopOf="@id/waveformSeekBar" />
+
+        <TextView
+            android:id="@+id/tvDuration"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:fontFamily="@font/rubik_regular"
+            android:text="00:00"
+            android:textColor="@color/black"
+            android:textSize="@dimen/_10ssp"
+            app:layout_constraintEnd_toEndOf="@id/waveformSeekBar"
+            app:layout_constraintTop_toBottomOf="@id/waveformSeekBar"
+            tools:text="10:35" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</RelativeLayout>

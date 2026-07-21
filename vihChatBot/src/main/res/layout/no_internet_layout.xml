@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/_50sdp"
+    android:orientation="vertical">
+
+
+    <androidx.appcompat.widget.AppCompatImageView
+        android:layout_width="wrap_content"
+        android:layout_height="@dimen/_90sdp"
+        android:src="@drawable/iv_no_internet" />
+
+    <TextView
+        android:id="@+id/tvToolBarMain"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:fontFamily="@font/rubik_light"
+        android:gravity="center"
+        android:text="You're offline. Please check your internet connection and try again."
+        android:textColor="#5C5E63"
+        android:textSize="@dimen/_16ssp" />
+
+
+</LinearLayout>

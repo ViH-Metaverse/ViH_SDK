@@ -1,0 +1,396 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="@android:color/transparent"
+    android:paddingVertical="@dimen/_5sdp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/cltemp"
+        android:layout_width="@dimen/_250sdp"
+        android:layout_height="wrap_content"
+        android:background="@drawable/chat_bubble_receiver"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/constraintLayout15"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cvTemplateImage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:visibility="visible"
+                app:cardBackgroundColor="#F5F6F7"
+                app:cardCornerRadius="@dimen/_14sdp"
+                app:cardElevation="0dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <androidx.constraintlayout.widget.ConstraintLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
+
+                    <RelativeLayout
+                        android:id="@+id/rlImageLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="visible"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent">
+
+                        <androidx.appcompat.widget.AppCompatImageView
+                            android:id="@+id/ivTemplateHeaderImage"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:adjustViewBounds="true"
+                            android:background="@drawable/rounded_image"
+                            android:clipToOutline="true"
+                            android:scaleType="fitXY"
+                            android:visibility="visible"
+                            tools:src="@drawable/placeholder" />
+                    </RelativeLayout>
+
+                    <RelativeLayout
+                        android:id="@+id/rlVideoLayout"
+                        android:layout_width="@dimen/_230sdp"
+                        android:layout_height="match_parent"
+                        android:visibility="gone"
+                        tools:visibility="visible"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent">
+
+                        <ImageView
+                            android:id="@+id/ivTemplateVideo"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:adjustViewBounds="true"
+                            android:scaleType="fitXY"
+                            android:src="@drawable/placeholder" />
+
+                        <TextView
+                            android:id="@+id/buttonDownload"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_centerInParent="true"
+                            android:background="@drawable/rounded_tv"
+                            android:drawableLeft="@drawable/ic_dl_mini"
+                            android:drawablePadding="@dimen/_5sdp"
+                            android:paddingHorizontal="@dimen/_6sdp"
+                            android:paddingVertical="@dimen/_8sdp"
+                            android:text="Download"
+                            tools:visibility="gone"
+                            android:textColor="#6B6968"
+                            android:textSize="@dimen/_8ssp"
+                            android:visibility="visible" />
+
+                        <FrameLayout
+                            android:id="@+id/flVideoProgressCancel"
+                            android:layout_width="@dimen/_40sdp"
+                            android:layout_height="@dimen/_40sdp"
+                            android:layout_centerInParent="true"
+                            android:visibility="gone"
+                            tools:visibility="gone">
+
+                            <com.vihmessenger.vihchatbot.utils.CircularProgressBar
+                                android:id="@+id/videoCircularProgressBar"
+                                android:layout_width="match_parent"
+                                android:layout_height="match_parent"
+                                app:cpb_background_progressbar_color="#b6bbd8"
+                                app:cpb_background_progressbar_width="3dp"
+                                app:cpb_progress_direction="to_right"
+                                app:cpb_progressbar_color="@color/primarycolor"
+                                app:cpb_progressbar_width="5dp"
+                                app:cpb_round_border="false" />
+
+                            <androidx.appcompat.widget.AppCompatImageView
+                                android:id="@+id/ivCancelVideoDownload"
+                                android:layout_width="@dimen/_20sdp"
+                                android:layout_height="@dimen/_20sdp"
+                                android:layout_gravity="center"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:padding="@dimen/_2sdp"
+                                android:src="@drawable/ic_cancel_download" />
+                        </FrameLayout>
+
+                        <ImageView
+                            android:id="@+id/imgPlay"
+                            android:layout_width="@dimen/_50sdp"
+                            android:layout_height="@dimen/_50sdp"
+                            android:layout_centerInParent="true"
+                            android:src="@drawable/ic_play"
+                            tools:visibility="visible"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/tvVideoDuration"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_alignParentStart="true"
+                            android:layout_alignParentBottom="true"
+                            android:layout_marginStart="8dp"
+                            android:layout_marginBottom="8dp"
+                            android:background="@drawable/rounded_tv"
+                            android:padding="4dp"
+                            android:text=""
+                            android:textColor="#FFFFFF"
+                            android:textSize="12sp"
+                            android:visibility="gone" />
+
+                    </RelativeLayout>
+
+                    <RelativeLayout
+                        android:id="@+id/rlTemplateDoc"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent">
+
+                        <androidx.appcompat.widget.AppCompatImageView
+                            android:id="@+id/ivTemplateDocument"
+                            android:layout_width="match_parent"
+                            android:layout_height="@dimen/_100sdp"
+                            android:scaleType="centerCrop"
+                            android:src="@drawable/placeholder"
+                            android:visibility="visible"
+                            tools:src="@drawable/placeholder" />
+
+                        <LinearLayout
+                            android:id="@+id/llDocDownloadControls"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_below="@id/ivTemplateDocument"
+                            android:background="#EAEAEA"
+                            android:orientation="horizontal"
+                            android:padding="@dimen/_5sdp">
+
+                            <FrameLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:background="@drawable/background_doc"
+                                android:paddingHorizontal="@dimen/_5sdp"
+                                android:paddingVertical="@dimen/_5sdp">
+
+                                <androidx.appcompat.widget.AppCompatImageView
+                                    android:id="@+id/ivDocType"
+                                    android:layout_width="@dimen/_23sdp"
+                                    android:layout_height="@dimen/_23sdp"
+                                    android:src="@drawable/ic_pdf" />
+                            </FrameLayout>
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_gravity="center_vertical"
+                                android:layout_marginStart="@dimen/_5sdp"
+                                android:layout_marginEnd="@dimen/_5sdp"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/tvFileName"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:ellipsize="end"
+                                    android:fontFamily="@font/rubik_regular"
+                                    android:maxLength="12"
+                                    android:text="FileName.pdf"
+                                    android:textColor="@color/black"
+                                    android:textSize="@dimen/_10ssp" />
+
+                                <TextView
+                                    android:id="@+id/tvFileDetails"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:fontFamily="@font/rubik_regular"
+                                    android:text="File details here"
+                                    android:textColor="@color/black"
+                                    android:textSize="@dimen/_8ssp" />
+                            </LinearLayout>
+
+                            <androidx.appcompat.widget.AppCompatImageView
+                                android:id="@+id/ivDownload"
+                                android:layout_width="@dimen/_30sdp"
+                                android:layout_height="@dimen/_30sdp"
+                                android:layout_gravity="center_vertical"
+                                android:layout_marginEnd="10dp"
+                                android:background="?attr/selectableItemBackgroundBorderless"
+                                android:padding="@dimen/_4sdp"
+                                android:src="@drawable/ic_doc_dl"
+                                android:visibility="visible" />
+
+                            <FrameLayout
+                                android:id="@+id/flProgressCancel"
+                                android:layout_width="@dimen/_30sdp"
+                                android:layout_height="@dimen/_30sdp"
+                                android:layout_gravity="center_vertical"
+                                android:layout_marginEnd="10dp"
+                                android:visibility="gone">
+
+                                <com.vihmessenger.vihchatbot.utils.CircularProgressBar
+                                    android:id="@+id/circularProgressBar"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent"
+                                    app:cpb_background_progressbar_color="#b6bbd8"
+                                    app:cpb_background_progressbar_width="3dp"
+                                    app:cpb_progress_direction="to_right"
+                                    app:cpb_progressbar_color="@color/primarycolor"
+                                    app:cpb_progressbar_width="5dp"
+                                    app:cpb_round_border="false" />
+
+                                <androidx.appcompat.widget.AppCompatImageView
+                                    android:id="@+id/ivCancelDownload"
+                                    android:layout_width="@dimen/_20sdp"
+                                    android:layout_height="@dimen/_20sdp"
+                                    android:layout_gravity="center"
+                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    android:padding="@dimen/_2sdp"
+                                    android:src="@drawable/ic_cancel_download" />
+                            </FrameLayout>
+                        </LinearLayout>
+
+                    </RelativeLayout>
+
+
+                    <include
+                        android:id="@+id/lyAudioTemplate"
+                        layout="@layout/item_audio_file_template"
+                        android:layout_width="@dimen/_230sdp"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        app:layout_constraintBottom_toBottomOf="parent"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toTopOf="parent" />
+
+
+                </androidx.constraintlayout.widget.ConstraintLayout>
+
+            </androidx.cardview.widget.CardView>
+
+            <TextView
+                android:id="@+id/tvHeader"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="@dimen/_7sdp"
+                android:fontFamily="@font/rubik_regular"
+                android:maxWidth="@dimen/_230sdp"
+                android:text="hello"
+                android:textAlignment="textStart"
+                android:textColor="@color/black"
+                android:textSize="@dimen/_11ssp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/cvTemplateImage" />
+
+
+            <com.vihmessenger.vihchatbot.ui.custom.CustomViewPager
+                android:id="@+id/vpProducts"
+                android:layout_width="@dimen/_230sdp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="@dimen/_5sdp"
+                android:layout_marginBottom="@dimen/_5sdp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/tvHeader" />
+
+            <com.vihmessenger.vihchatbot.utils.indicator.ViewPagerIndicator2
+                android:id="@+id/viewPagerIndicator"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="@dimen/_7sdp"
+                app:itemDividerWidth="8dp"
+                app:itemSelectedColor="@color/primarycolor"
+                app:itemUnselectedColor="@android:color/darker_gray"
+                app:layout_constraintBottom_toTopOf="@+id/rvTemplateButton"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/vpProducts" />
+
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/rvTemplateButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/_5sdp"
+                android:clipToPadding="false"
+                android:visibility="visible"
+                app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/viewPagerIndicator" />
+
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/clFooter"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:paddingTop="@dimen/_8sdp"
+            android:paddingBottom="@dimen/_3sdp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@+id/constraintLayout15">
+
+            <TextView
+                android:id="@+id/tvFooter"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/rubik_regular"
+                android:gravity="start"
+                android:maxWidth="@dimen/_230sdp"
+                android:text="Not interested? Tap Stop promotions"
+                android:textAlignment="textStart"
+                android:textColor="@color/colorBottomNavUnSelected"
+                android:textSize="@dimen/_11ssp"
+                app:layout_constraintBottom_toTopOf="@+id/tvChatTemplateTime"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/tvChatTemplateTime"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="@dimen/_5sdp"
+                android:fontFamily="@font/rubik_regular"
+                android:text="~ Sent 0 min ago"
+                android:textColor="@color/textCompanyColor"
+                android:textSize="@dimen/_8ssp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent" />
+
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <ImageView
+        android:id="@+id/btn_share"
+        android:layout_width="@dimen/_25sdp"
+        android:layout_height="@dimen/_25sdp"
+        android:layout_marginHorizontal="@dimen/_4sdp"
+        android:contentDescription="Share"
+        android:src="@drawable/ic_share"
+        android:visibility="invisible"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@+id/cltemp"
+        app:layout_constraintTop_toTopOf="parent" />
+</androidx.constraintlayout.widget.ConstraintLayout>

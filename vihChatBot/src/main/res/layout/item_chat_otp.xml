@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dedicated OTP message card (template_type == 1). Visually distinct from a normal/received
+     bubble and from promotional/transactional templates: lock badge, "One-time password" label,
+     the code in monospace with a Copy affordance, and an optional origin badge. See OTP_MOBILE_SPEC §3. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="@dimen/_250sdp"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="@dimen/_5sdp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/clOtpCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="@dimen/_5sdp"
+        android:background="@drawable/bg_otp_card"
+        android:padding="@dimen/_12sdp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Header: lock + "One-time password" + source badge -->
+        <ImageView
+            android:id="@+id/ivOtpLock"
+            android:layout_width="@dimen/_14sdp"
+            android:layout_height="@dimen/_14sdp"
+            android:src="@drawable/ic_otp_lock"
+            app:layout_constraintBottom_toBottomOf="@id/tvOtpTitle"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/tvOtpTitle" />
+
+        <TextView
+            android:id="@+id/tvOtpTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_5sdp"
+            android:fontFamily="@font/rubik_medium"
+            android:text="One-time password"
+            android:textColor="@color/primarycolor"
+            android:textSize="@dimen/_9ssp"
+            app:layout_constraintStart_toEndOf="@id/ivOtpLock"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/tvOtpSource"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_otp_source_badge"
+            android:fontFamily="@font/rubik_medium"
+            android:paddingStart="@dimen/_6sdp"
+            android:paddingTop="@dimen/_2sdp"
+            android:paddingEnd="@dimen/_6sdp"
+            android:paddingBottom="@dimen/_2sdp"
+            android:text="VIA API"
+            android:textColor="@color/primarycolor"
+            android:textSize="@dimen/_7ssp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="@id/tvOtpTitle"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/tvOtpTitle"
+            tools:visibility="visible" />
+
+        <!-- Body: the OTP text, rendered verbatim (never via link-preview / template media path) -->
+        <TextView
+            android:id="@+id/tvOtpBody"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_8sdp"
+            android:fontFamily="@font/rubik_regular"
+            android:text="Your OTP is 123456. Valid for 5 minutes."
+            android:textColor="#1C2020"
+            android:textSize="@dimen/_11ssp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvOtpTitle" />
+
+        <!-- Code chip: extracted code + Copy button (hidden when no numeric code is present) -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:id="@+id/clOtpCode"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_8sdp"
+            android:background="@drawable/bg_otp_code_chip"
+            android:paddingStart="@dimen/_12sdp"
+            android:paddingTop="@dimen/_8sdp"
+            android:paddingEnd="@dimen/_8sdp"
+            android:paddingBottom="@dimen/_8sdp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvOtpBody">
+
+            <TextView
+                android:id="@+id/tvOtpCode"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:letterSpacing="0.15"
+                android:text="123456"
+                android:textColor="#1C2020"
+                android:textSize="@dimen/_16ssp"
+                android:textStyle="bold"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@id/tvOtpCopy"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+            <TextView
+                android:id="@+id/tvOtpCopy"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_otp_copy_button"
+                android:drawableStart="@drawable/ic_content_copy"
+                android:drawablePadding="@dimen/_4sdp"
+                android:fontFamily="@font/rubik_medium"
+                android:paddingStart="@dimen/_10sdp"
+                android:paddingTop="@dimen/_5sdp"
+                android:paddingEnd="@dimen/_10sdp"
+                android:paddingBottom="@dimen/_5sdp"
+                android:text="Copy"
+                android:textColor="@color/primarycolor"
+                android:textSize="@dimen/_10ssp"
+                app:drawableTint="@color/primarycolor"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent" />
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+
+        <TextView
+            android:id="@+id/tvOtpTime"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_5sdp"
+            android:fontFamily="@font/rubik_regular"
+            android:text="4:39 pm"
+            android:textColor="@color/textCompanyColor"
+            android:textSize="@dimen/_8ssp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/clOtpCode" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

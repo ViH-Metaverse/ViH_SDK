@@ -1,0 +1,9 @@
+# JitPack build config for the VIH Messenger SDK (:vihChatBot library module).
+# Lets integrators pull the SDK straight from a GitHub tag with no Sonatype account.
+# AGP 8 requires JDK 17 to run Gradle (the library still targets Java 8 bytecode).
+jdk:
+  - openjdk17
+install:
+  # Publishes both flavor artifacts (vih-sdk-staging + vih-sdk) to JitPack's local
+  # Maven repo. Signing is skipped automatically (no ossrhPassword on the build server).
+  - ./gradlew :vihChatBot:publishToMavenLocal

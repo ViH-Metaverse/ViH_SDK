@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:padding="@dimen/_10sdp">
+
+    <!-- Company Logo -->
+    <com.vihmessenger.vihchatbot.utils.CircleImageView
+        android:id="@+id/ivDiscoverImage"
+        android:layout_width="@dimen/_40sdp"
+        android:layout_height="@dimen/_40sdp"
+        android:src="@drawable/profile_placeholder"
+        app:civ_border_color="@color/black"
+        app:civ_border_width="0dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/_10sdp"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@+id/chatButton"
+        app:layout_constraintStart_toEndOf="@+id/ivDiscoverImage"
+        app:layout_constraintTop_toTopOf="@+id/ivDiscoverImage">
+
+        <TextView
+            android:id="@+id/tvDiscoverTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/rubik_bold"
+            android:text="Enterprise name"
+            android:textColor="@color/vih_text_primary"
+            android:textSize="@dimen/_12ssp" />
+
+        <!-- Category/Industry -->
+        <TextView
+            android:id="@+id/tvDiscoverCompanyType"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/rubik_regular"
+            android:textColor="@color/vih_text_secondary"
+            android:textSize="@dimen/_10ssp"
+            tools:text="Telecommunications &amp; It" />
+    </LinearLayout>
+
+
+    <LinearLayout
+        android:id="@+id/chatButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:background="@drawable/bg_blue_btn"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="@dimen/_14sdp"
+        android:paddingVertical="@dimen/_7sdp"
+        app:layout_constraintBottom_toBottomOf="@+id/ivDiscoverImage"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <ImageView
+            android:id="@+id/ivChatIcon"
+            android:layout_width="@dimen/_12sdp"
+            android:layout_height="@dimen/_12sdp"
+            android:contentDescription="Chat icon"
+            android:src="@drawable/ic_chat" />
+
+        <TextView
+            android:id="@+id/tvChatLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_5sdp"
+            android:fontFamily="@font/rubik_medium"
+            android:text="Chat"
+            android:textColor="#6962E7"
+            android:textSize="@dimen/_10ssp" />
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

@@ -1,0 +1,2 @@
+SwiftPM requires a `Resources/` directory to exist when declared in Package.swift.
+Drop fonts, asset catalogues, JSON config, etc. here.

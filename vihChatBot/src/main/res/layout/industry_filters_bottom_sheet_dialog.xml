@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="@dimen/_10sdp">
+
+    <View
+        android:id="@+id/view_indicator"
+        android:layout_width="@dimen/_40sdp"
+        android:layout_height="@dimen/_4sdp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginVertical="@dimen/_6sdp"
+        android:background="@drawable/bg_bottom_sheet_indicator" />
+
+    <ListView
+        android:id="@+id/listViewIndustries"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:divider="@android:color/transparent"
+        android:nestedScrollingEnabled="true"
+        android:scrollbars="none"
+        tools:listitem="@layout/item_industry" />
+
+    <!-- Divider after listViewIndustries -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#CACACA"
+        android:layout_marginVertical="@dimen/_5sdp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="@dimen/_5sdp">
+
+        <TextView
+            android:id="@+id/buttonClear"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_weight="1"
+            android:padding="@dimen/_10sdp"
+            android:background="@drawable/bg_blue_btn"
+            android:gravity="center"
+            android:text="Clear"
+            android:textColor="@color/primarycolor"
+            android:textSize="@dimen/_14ssp" />
+
+        <!-- Divider between buttonClear and buttonApply -->
+        <View
+            android:layout_width="1dp"
+            android:layout_height="match_parent"
+            android:layout_marginHorizontal="@dimen/_15sdp"
+            android:background="#CACACA"/>
+
+        <TextView
+            android:id="@+id/buttonApply"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/tv_background_filled"
+            android:gravity="center"
+            android:textSize="@dimen/_14ssp"
+            android:padding="@dimen/_10sdp"
+            android:text="Apply"
+            android:textColor="@color/white" />
+    </LinearLayout>
+</LinearLayout>

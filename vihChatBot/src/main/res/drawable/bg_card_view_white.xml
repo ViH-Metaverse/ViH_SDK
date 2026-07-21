@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Product-carousel card. This sits inside the fixed-light received-message bubble
+    (chat_bubble_receiver = #F7F7F7, which does NOT flip for dark mode), so the card must
+    stay light too — otherwise its hardcoded black product text becomes unreadable on a dark
+    surface. Do NOT switch these to @color/vih_surface (it flips dark in night mode).
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Outer light layer -->
+    <item
+        android:bottom="1dp"
+        android:left="1dp"
+        android:right="1dp"
+        android:top="1dp">
+        <shape android:shape="rectangle">
+            <solid android:color="#F0F0F0" />
+            <corners android:radius="25dp" />
+        </shape>
+    </item>
+
+    <!-- Inner white content layer -->
+    <item
+        android:bottom="3dp"
+        android:left="3dp"
+        android:right="3dp"
+        android:top="3dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/white" />
+            <corners android:radius="25dp" />
+        </shape>
+    </item>
+
+</layer-list>

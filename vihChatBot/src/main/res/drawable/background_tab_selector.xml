@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/background_tab_unselected"  android:fontFamily="@font/rubik_regular" android:state_checked="false" />
+    <item android:drawable="@drawable/background_tab_selected"  android:fontFamily="@font/rubik_bold" android:state_checked="true" />
+
+</selector>

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- true = dark status-bar icons (for light backgrounds). Flipped in values-night. -->
+    <bool name="vih_light_status_bar">true</bool>
+</resources>

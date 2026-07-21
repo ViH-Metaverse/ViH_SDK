@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="98dp"
+    android:height="90dp"
+    android:viewportWidth="98"
+    android:viewportHeight="90">
+
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M20.111,18.987L84.111,18.987"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:endX="31.375"
+                android:endY="17.588"
+                android:startX="31.318"
+                android:startY="20.335"
+                android:type="linear">
+                <item
+                    android:color="?attr/myIconGradientStart"
+                    android:offset="0" />
+                <item
+                    android:color="?attr/myIconGradientMid"
+                    android:offset="0.49" />
+                <item
+                    android:color="?attr/myIconGradientEnd"
+                    android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M20.111,34.986L71.667,34.986"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:endX="29.209"
+                android:endY="33.588"
+                android:startX="29.139"
+                android:startY="36.334"
+                android:type="linear">
+                <item
+                    android:color="?attr/myIconGradientStart"
+                    android:offset="0" />
+                <item
+                    android:color="?attr/myIconGradientMid"
+                    android:offset="0.49" />
+                <item
+                    android:color="?attr/myIconGradientEnd"
+                    android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M20.111,50.986L61,50.986"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:endX="27.36"
+                android:endY="49.589"
+                android:startX="27.271"
+                android:startY="52.334"
+                android:type="linear">
+                <item
+                    android:color="?attr/myIconGradientStart"
+                    android:offset="0" />
+                <item
+                    android:color="?attr/myIconGradientMid"
+                    android:offset="0.49" />
+                <item
+                    android:color="?attr/myIconGradientEnd"
+                    android:offset="1" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+</vector>

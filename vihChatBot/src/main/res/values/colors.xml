@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFF</color>
+
+    <!-- System-theme-aware surfaces & text. Light values here; dark overrides live in
+         values-night/colors.xml. Use these (not @color/white / @color/black) for screen
+         backgrounds and body text so they adapt to the device's dark mode. -->
+    <color name="vih_screen_bg">#FFFFFF</color>
+    <color name="vih_surface">#FFFFFF</color>
+    <color name="vih_text_primary">#1C2020</color>
+    <color name="vih_text_secondary">#667085</color>
+    <color name="primarycolor">#5955F1</color>
+    <color name="secondarycolor">#5955F1</color>
+    <color name="primarytextcolor">#FFFFFF</color>
+    <color name="secondarytextcolor">#33363C</color>
+    <color name="colorBottomNav">#6C54E6</color>
+    <color name="colorBottomNavUnSelected">#828282</color>
+    <color name="colorStatusBar">#51F7F7F9</color>
+    <color name="textColor">#1E1E1E</color>
+    <color name="textCompanyColor">#828282</color>
+    <color name="textPrivacyColor">#667085</color>
+
+    <color name="default_indicator_on">#FFFFFF</color>
+    <color name="default_indicator_off">#333333</color>
+    <color name="default_indicator_light_on">#111111</color>
+    <color name="default_indicator_light_off">#777777</color>
+
+    <color name="status_bar_grey">#F7F7F7</color>
+</resources>

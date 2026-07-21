@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SECURITY: FileProvider paths restricted to specific directories only.
+    Removed overly broad path="." entries that exposed entire directory trees.
+-->
+<paths>
+    <!-- Public documents -->
+    <external-path
+        name="public_documents"
+        path="Documents/" />
+
+    <!-- App-specific movies -->
+    <external-files-path
+        name="app_movies"
+        path="Movies/" />
+
+    <!-- App-specific music -->
+    <external-files-path
+        name="app_music"
+        path="Music/" />
+
+    <!-- App-specific pictures -->
+    <external-files-path
+        name="app_pictures"
+        path="Pictures/" />
+
+    <!-- App-specific documents: getExternalFilesDir(DIRECTORY_DOCUMENTS) -->
+    <external-files-path
+        name="app_documents"
+        path="Documents/" />
+
+    <!-- Cache for temporary shared images -->
+    <cache-path
+        name="shared_images"
+        path="images/" />
+
+    <!-- Internal files for documents -->
+    <files-path
+        name="internal_files"
+        path="documents/" />
+</paths>

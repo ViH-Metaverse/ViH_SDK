@@ -1,0 +1,20 @@
+# === Android / Gradle ===
+.gradle/
+build/
+local.properties
+*.keystore
+*.jks
+**/google-services.json
+.idea/
+*.iml
+captures/
+.cxx/
+
+# === Swift Package Manager / Xcode ===
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+
+# === macOS ===
+.DS_Store

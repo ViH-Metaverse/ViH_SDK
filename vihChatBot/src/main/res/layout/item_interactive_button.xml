@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    A single GLM interactive button (quick_reply / url / action) rendered under a bot bubble.
+    Uses the app's outline-button style (same as the product-card Buy Now / Add to Cart) so it
+    reads correctly on the fixed-light received-message bubble.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/clInteractiveButton"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginVertical="@dimen/_3sdp"
+    android:background="@drawable/rounded_normal_bg"
+    android:gravity="center"
+    android:minHeight="@dimen/_30sdp"
+    android:orientation="horizontal"
+    android:paddingHorizontal="@dimen/_10sdp"
+    android:paddingVertical="@dimen/_7sdp">
+
+    <TextView
+        android:id="@+id/tvInteractiveButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:fontFamily="@font/rubik_medium"
+        android:gravity="center"
+        android:text="Button"
+        android:textColor="@color/primarycolor"
+        android:textSize="@dimen/_10ssp" />
+
+</LinearLayout>
