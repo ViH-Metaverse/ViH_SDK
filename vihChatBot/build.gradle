@@ -178,14 +178,14 @@ afterEvaluate {
                 from components.stagingRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk-staging'
-                version = '1.1.1'   // white-label config (split tabs + brand theming); Offers=active chats
+                version = '1.1.2'   // white-label config (split tabs + brand theming); Offers=active chats
                 applyVihPom(pom)
             }
             prodRelease(MavenPublication) {
                 from components.prodRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk'
-                version = '1.1.1'  // white-label config (split tabs + brand theming); Offers=active chats
+                version = '1.1.2'  // white-label config (split tabs + brand theming); Offers=active chats
                 applyVihPom(pom)
             }
         }
