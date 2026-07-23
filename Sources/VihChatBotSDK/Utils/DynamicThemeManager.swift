@@ -22,6 +22,10 @@ public final class DynamicThemeManager {
 
     private var listeners = NSHashTable<AnyObject>.weakObjects()
 
+    /// Host brand-color override (from `VihUIConfig.theme`). Stored so it can be re-applied
+    /// on top of every server-features update — "host config wins" precedence.
+    private var hostOverride: (primary: String?, onPrimary: String?, secondary: String?, accent: String?)?
+
     private init() {}
 
     public func register(_ listener: ThemeAware) {
@@ -47,7 +51,27 @@ public final class DynamicThemeManager {
             headerColor: UIColor(hex: model.solid_color) ?? palette.headerColor,
             defaultTextColor: palette.defaultTextColor
         )
+        applyStoredHostOverride()   // host config wins over server colors
         broadcast()
+    }
+
+    /// White-label override: applies the host app's brand colors on top of whatever colors
+    /// are currently set (server features or defaults), overriding ONLY the fields supplied.
+    /// The override is remembered and re-applied after each server-features update, so
+    /// `VihUIConfig.theme` always wins. Malformed hex is ignored per-field.
+    public func applyHostOverride(primary: String?, onPrimary: String?, secondary: String?, accent: String?) {
+        hostOverride = (primary, onPrimary, secondary, accent)
+        applyStoredHostOverride()
+        broadcast()
+    }
+
+    private func applyStoredHostOverride() {
+        guard let o = hostOverride else { return }
+        var p = palette
+        if let c = UIColor(hex: o.primary) { p.primaryColor = c }
+        if let c = UIColor(hex: o.onPrimary) { p.primaryTextColor = c }
+        if let c = UIColor(hex: o.secondary) ?? UIColor(hex: o.accent) { p.secondaryColor = c }
+        palette = p
     }
 
     private func broadcast() {

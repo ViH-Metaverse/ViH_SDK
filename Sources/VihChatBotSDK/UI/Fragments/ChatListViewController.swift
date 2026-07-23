@@ -9,6 +9,20 @@ public final class ChatListViewController: BaseViewController, UITableViewDataSo
     private let tableView = UITableView()
     private var items: [ChatListModel] = []
 
+    /// Optional category filter (`cpaas_json.templ_typ`: "1" OTP / "3" transactional). When set,
+    /// the conversation list keeps only threads whose latest message is that category. nil = all.
+    private let category: String?
+
+    public init(category: String? = nil) {
+        self.category = category
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    public required init?(coder: NSCoder) {
+        self.category = nil
+        super.init(coder: coder)
+    }
+
     public override func initView() {
         title = "Chats"
         tableView.translatesAutoresizingMaskIntoConstraints = false
@@ -26,8 +40,13 @@ public final class ChatListViewController: BaseViewController, UITableViewDataSo
 
     public override func setObservers() {
         cancellables.append(viewModel.chatListLiveData.observe { [weak self] response in
-            self?.items = response.data
-            self?.tableView.reloadData()
+            guard let self = self else { return }
+            if let category = self.category {
+                self.items = response.data.filter { $0.last_message.cpaas_json?.templ_typ == category }
+            } else {
+                self.items = response.data
+            }
+            self.tableView.reloadData()
         })
 
         NotificationCenter.default.addObserver(
