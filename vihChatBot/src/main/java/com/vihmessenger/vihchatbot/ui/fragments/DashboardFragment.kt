@@ -43,6 +43,9 @@ import com.google.firebase.messaging.FirebaseMessaging
 import com.google.gson.Gson
 import com.vihmessenger.vihchatbot.AppController
 import com.vihmessenger.vihchatbot.R
+import com.vihmessenger.vihchatbot.config.VihConfigStore
+import com.vihmessenger.vihchatbot.config.VihTab
+import com.vihmessenger.vihchatbot.config.VihTabId
 import com.vihmessenger.vihchatbot.constants.AppConstants
 import com.vihmessenger.vihchatbot.data.model.UserProfileRequest
 import com.vihmessenger.vihchatbot.databinding.FragmentDashboardBinding
@@ -235,6 +238,13 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                         ContextCompat.getColor(requireContext(), R.color.black).toHex()
                     )
                 }
+                // Host config wins: re-apply the integrator's brand override on top of the
+                // server colors so a VihConfig.theme is never clobbered by SDK-features.
+                VihConfigStore.theme?.let { theme ->
+                    DynamicThemeManager.applyHostOverride(
+                        requireContext(), theme.primary, theme.onPrimary, theme.secondary, theme.accent
+                    )
+                }
                 checkAndPromptForShortcut(
                     features.chat_boat_logo ?: "",
                     features.chat_boat_name ?: ""
@@ -271,7 +281,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                     .registerCachedTokenIfNeeded(requireContext())
 
                 if (!isInitialFragmentLoaded) {
-                    setChatListFragment() // This will set bottomNav to R.id.navChat
+                    selectInitialTab() // config default tab (dynamic) or the chat list (static)
                     isInitialFragmentLoaded = true
                 } else {
                     Log.d(TAG, "UserProfile updated, but initial fragment was already loaded.")
@@ -291,6 +301,9 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
         setDashBoardClBackgroundColor()
     }
 
+    /** Host-supplied navigation config, or null for the legacy three static tabs. */
+    private val configNav get() = VihConfigStore.navigation
+
     private fun setupBottomNavigation() {
         _binding?.let { binding ->
             regularFont = ResourcesCompat.getFont(requireContext(), R.font.rubik_regular)!!
@@ -309,31 +322,119 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                 }
             }
 
-            binding.bottomNavigation.setOnItemSelectedListener { item ->
-                when (item.itemId) {
-                    R.id.navDiscover -> {
-                        handleDiscoverSelection()
-                        true
-                    }
-                    R.id.navChat -> {
-                        handleChatsSelection()
-                        true
-                    }
-
-                    R.id.navSettings -> {
-                        handleSettingsSelection()
-                        true
-                    }
-
-                    else -> false
-                }
+            val nav = configNav
+            if (nav != null && nav.tabs.isNotEmpty()) {
+                setupDynamicTabs(binding, nav.tabs)
+            } else {
+                setupStaticTabs(binding)
             }
-
-            if (binding.bottomNavigation.selectedItemId == 0) { // Check if not already set
-                binding.bottomNavigation.selectedItemId = R.id.navChat // Or your default
-            }
-
         } ?: Log.e(TAG, "setupBottomNavigation: Binding is null")
+    }
+
+    /** Legacy path: the three tabs baked into @menu/nav_menu.xml. Unchanged behavior. */
+    private fun setupStaticTabs(binding: FragmentDashboardBinding) {
+        binding.bottomNavigation.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.navDiscover -> { handleDiscoverSelection(); true }
+                R.id.navChat -> { handleChatsSelection(); true }
+                R.id.navSettings -> { handleSettingsSelection(); true }
+                else -> false
+            }
+        }
+        if (binding.bottomNavigation.selectedItemId == 0) {
+            binding.bottomNavigation.selectedItemId = R.id.navChat
+        }
+    }
+
+    /**
+     * White-label path: build the bottom-nav menu from the host's [VihTab] list — composition,
+     * order, per-tab label + icon. Initial selection is deferred to [selectInitialTab] after
+     * auth. BottomNavigationView supports at most 5 items, so extra tabs are dropped (logged).
+     */
+    private fun setupDynamicTabs(binding: FragmentDashboardBinding, tabs: List<VihTab>) {
+        val shown = if (tabs.size > 5) {
+            Log.w(TAG, "setupDynamicTabs: ${tabs.size} tabs configured; BottomNav caps at 5, dropping extras.")
+            tabs.take(5)
+        } else tabs
+
+        val menu = binding.bottomNavigation.menu
+        menu.clear()
+        shown.forEachIndexed { index, tab ->
+            menu.add(0, tab.id.itemId, index, tab.label ?: defaultTabLabel(tab.id))
+                .setIcon(tab.icon ?: defaultTabIcon(tab.id))
+        }
+
+        binding.bottomNavigation.setOnItemSelectedListener { item ->
+            val tabId = VihTabId.fromItemId(item.itemId) ?: return@setOnItemSelectedListener false
+            val label = shown.firstOrNull { it.id == tabId }?.label
+            handleTabSelection(tabId, label)
+            true
+        }
+        // No initial selection here — selectInitialTab() runs once auth completes.
+    }
+
+    private fun handleTabSelection(tabId: VihTabId, label: String?) {
+        when (tabId) {
+            VihTabId.DISCOVER -> { handleDiscoverSelection(); label?.let { setTopBarTitle(it) } }
+            VihTabId.CHATS -> { handleChatsSelection(); label?.let { setTopBarTitle(it) } }
+            VihTabId.SETTINGS -> handleSettingsSelection()
+            // Offers/Promo shows the full active-chats list — a conversation-level "promotional"
+            // classification isn't available from the chat-list API (category lives on individual
+            // messages), so filtering to it would hide the user's real conversations. OTP and
+            // Transactional still filter by their message template_type.
+            VihTabId.PROMO -> handleCategorySelection(tabId, label ?: defaultTabLabel(tabId), category = null)
+            VihTabId.TRANSACTIONAL, VihTabId.OTP ->
+                handleCategorySelection(tabId, label ?: defaultTabLabel(tabId), category = tabId.templateType)
+        }
+    }
+
+    /** A chat surface; [category] filters conversations by `template_type`, or null = all chats. */
+    private fun handleCategorySelection(tabId: VihTabId, title: String, category: String?) {
+        binding.edtSearch.text?.clear()
+        communicator?.sendData("")
+        hideKeyboard()
+        binding.lyTopBar.btnFilter.visibility = View.GONE
+        binding.lyTopBar.btnClearFilters.visibility = View.GONE
+        setTopBarTitle(title)
+        binding.flDashboardSettings.visibility = View.INVISIBLE
+
+        arguments?.getString(AppConstants.HASHCODE_EXTRA)?.let { hashCode ->
+            mainFragment = ChatListFragment.getInstance(hashCode, category)
+            childFragmentManager.beginTransaction()
+                .replace(R.id.flDashboard, mainFragment!!)
+                .commit()
+        }
+        requireActivity().statusBarSecondaryColor()
+        setClSearchVisibility()
+    }
+
+    private fun defaultTabLabel(id: VihTabId): String = when (id) {
+        VihTabId.DISCOVER -> "Discover"
+        VihTabId.CHATS -> "Chats"
+        VihTabId.PROMO -> "Promotions"
+        VihTabId.TRANSACTIONAL -> "Transactions"
+        VihTabId.OTP -> "OTP"
+        VihTabId.SETTINGS -> "Settings"
+    }
+
+    private fun defaultTabIcon(id: VihTabId): Int = when (id) {
+        VihTabId.DISCOVER -> R.drawable.ic_discover
+        VihTabId.SETTINGS -> R.drawable.ic_settings
+        else -> R.drawable.ic_chat
+    }
+
+    /** Selects the opening tab: config defaultTab → CHATS if present → first tab (dynamic),
+     *  or the legacy chat list (static). Called once after auth. */
+    private fun selectInitialTab() {
+        val nav = configNav
+        if (nav != null && nav.tabs.isNotEmpty()) {
+            val target = nav.defaultTab
+                ?: nav.tabs.firstOrNull { it.id == VihTabId.CHATS }?.id
+                ?: nav.tabs.first().id
+            if (_binding != null) binding.bottomNavigation.selectedItemId = target.itemId
+        } else {
+            setChatListFragment()
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -497,7 +598,14 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
     }
 
     private fun setDiscoverFragment() {
-        if (_binding != null) { // Ensure binding is not null
+        if (_binding == null) return
+        val nav = configNav
+        if (nav != null && nav.tabs.isNotEmpty()) {
+            // Only honor the "go to Discover" transition if Discover is one of the tabs.
+            if (nav.tabs.any { it.id == VihTabId.DISCOVER }) {
+                binding.bottomNavigation.selectedItemId = VihTabId.DISCOVER.itemId
+            }
+        } else {
             binding.bottomNavigation.selectedItemId = R.id.navDiscover
         }
     }

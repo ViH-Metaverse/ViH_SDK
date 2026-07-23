@@ -23,6 +23,8 @@ import android.view.View
 import androidx.core.content.ContextCompat
 import com.vihmessenger.vihchatbot.BuildConfig
 import com.vihmessenger.vihchatbot.R
+import com.vihmessenger.vihchatbot.config.VihConfig
+import com.vihmessenger.vihchatbot.config.VihConfigStore
 import com.vihmessenger.vihchatbot.constants.AppConstants
 import com.vihmessenger.vihchatbot.utils.sharedPreference.Prefs
 import java.io.File
@@ -118,6 +120,39 @@ class FloatingButtonView @JvmOverloads constructor(
                 notificationIcon?.let { putExtra("NOTIFICATION_ICON", it) }
             }
             context.startActivity(intent)
+        }
+
+        /**
+         * White-label entry point. Same as [startSdk] above, plus a [VihConfig] that reshapes
+         * the SDK UI — brand colors and the tab set (split / rename / re-icon). The config is
+         * stored process-wide ([VihConfigStore]); the brand theme is applied immediately so the
+         * first frame is on-brand (host colors win — re-applied after server features load).
+         *
+         * @param config Customization for tabs + theme. See [VihConfig].
+         */
+        fun startSdk(
+            context: Context,
+            phone: String,
+            hashcode: String,
+            config: VihConfig,
+            name: String? = null,
+            userProfileUrl: String? = null,
+            userProfileBitmap: Bitmap? = null,
+            email: String? = null,
+            notificationIcon: Int? = null
+        ) {
+            VihConfigStore.set(config)
+            // Seed the brand colors up front so the dashboard opens on-brand. The dashboard
+            // re-applies this override after the server SDK-features response so host wins.
+            config.theme?.let { theme ->
+                DynamicThemeManager.applyHostOverride(
+                    context, theme.primary, theme.onPrimary, theme.secondary, theme.accent
+                )
+            }
+            startSdk(
+                context, phone, hashcode, name,
+                userProfileUrl, userProfileBitmap, email, notificationIcon
+            )
         }
 
         private fun saveBitmapToInternalStorage(context: Context, bitmap: Bitmap): String? {

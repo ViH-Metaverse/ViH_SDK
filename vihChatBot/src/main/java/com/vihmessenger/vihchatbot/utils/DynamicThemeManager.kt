@@ -186,4 +186,35 @@ object DynamicThemeManager {
             Log.e(TAG, "Invalid color format", e)
         }
     }
+
+    /**
+     * White-label override: applies the host app's brand colors on top of whatever colors are
+     * currently set (server features or defaults), overriding ONLY the fields it supplies.
+     * This is the "host config wins" precedence for [com.vihmessenger.vihchatbot.config.VihTheme].
+     * Malformed hex is ignored per-field. Call after server colors have been applied.
+     */
+    fun applyHostOverride(
+        context: Context,
+        primaryHex: String?,
+        onPrimaryHex: String?,
+        secondaryHex: String?,
+        accentHex: String?
+    ) {
+        appContext = context.applicationContext
+        var changed = false
+        fun parse(hex: String?): Int? = try {
+            hex?.let { Color.parseColor(it) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Invalid host override color: $hex", e); null
+        }
+
+        parse(primaryHex)?.let { primaryColor = it; changed = true }
+        parse(onPrimaryHex)?.let { primaryTextColor = it; changed = true }
+        (parse(secondaryHex) ?: parse(accentHex))?.let { secondaryColor = it; changed = true }
+
+        if (changed) {
+            saveColorsToPrefs(context)
+            notifyListeners()
+        }
+    }
 }

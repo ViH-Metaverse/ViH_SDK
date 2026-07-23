@@ -178,14 +178,14 @@ afterEvaluate {
                 from components.stagingRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk-staging'
-                version = '1.0.1'   // 1.0.0 (built against stagingnlp) is immutable — republish as 1.0.1
+                version = '1.1.1'   // white-label config (split tabs + brand theming); Offers=active chats
                 applyVihPom(pom)
             }
             prodRelease(MavenPublication) {
                 from components.prodRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk'
-                version = '1.0.10'  // next after published 1.0.9 (which pointed at retired plugseal host)
+                version = '1.1.1'  // white-label config (split tabs + brand theming); Offers=active chats
                 applyVihPom(pom)
             }
         }

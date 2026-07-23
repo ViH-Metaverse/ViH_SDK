@@ -34,10 +34,17 @@ class ChatListFragment : BaseFragment() {
 
     companion object {
         private val TAG = ChatListFragment::class.java.simpleName
+        private const val ARG_CATEGORY = "arg_category"
 
-        fun getInstance(hashCode: String) = ChatListFragment().apply {
+        /**
+         * @param category optional `cpaas_json.templ_typ` ("1" OTP / "2" promo / "3"
+         *   transactional). When set, the conversation list is filtered to threads whose latest
+         *   message is that category. Null = the unified list (all conversations).
+         */
+        fun getInstance(hashCode: String, category: String? = null) = ChatListFragment().apply {
             arguments = Bundle().apply {
                 putString(AppConstants.HASHCODE_EXTRA, hashCode)
+                category?.let { putString(ARG_CATEGORY, it) }
             }
         }
     }
@@ -133,8 +140,16 @@ class ChatListFragment : BaseFragment() {
             // Always hide the search-specific layout when new data arrives
             viewBinder.lyBottomNavItem.comingSoon.root.visibility = View.GONE
 
-            val isChatListEmpty = res?.data.isNullOrEmpty()
-            Log.d(TAG, "ChatListLiveData: Is empty? $isChatListEmpty. Data: ${res?.data}")
+            // Category-split tabs (Promo/Transactional/OTP) pass a template_type; keep only
+            // conversations whose latest message is that category. Null = the unified list.
+            val category = arguments?.getString(ARG_CATEGORY)
+            val chatData = res?.data?.let { list ->
+                if (category == null) list
+                else list.filter { it.last_message.cpaas_json?.templ_typ == category }
+            }
+
+            val isChatListEmpty = chatData.isNullOrEmpty()
+            Log.d(TAG, "ChatListLiveData: category=$category empty=$isChatListEmpty size=${chatData?.size}")
 
             viewBinder.lyBottomNavItem.apply {
                 if (isChatListEmpty) {
@@ -143,8 +158,8 @@ class ChatListFragment : BaseFragment() {
                 } else {
                     linear.visibility = View.GONE        // Hide initial empty state
                     rvChatList.visibility = View.VISIBLE   // Show RecyclerView
-                    res?.data?.let { chatData ->
-                        chatListAdapter.updateChatList(chatData.sortedByDescending {
+                    chatData?.let { data ->
+                        chatListAdapter.updateChatList(data.sortedByDescending {
                             parseDateToTimestamp(it.last_message.created_at)
                         })
                     }
