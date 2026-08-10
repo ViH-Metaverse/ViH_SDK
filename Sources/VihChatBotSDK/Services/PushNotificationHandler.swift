@@ -66,14 +66,45 @@ public enum PushNotificationHandler {
 
     /// Optional: build the equivalent of Android's custom RemoteViews
     /// notification. Most iOS hosts prefer to send `alert` payloads from the
-    /// server and let the system render them.
+    /// server and let the system render them. The tone is chosen from the
+    /// payload's CPaaS `template_type` (see ``sound(forTemplateType:)``).
     public static func presentLocalNotification(title: String, body: String, userInfo: [String: Any]) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        content.sound = .default
         content.userInfo = userInfo
+        applyTone(to: content)
         let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
         UNUserNotificationCenter.current().add(req)
+    }
+
+    // MARK: - Per-template notification tones
+
+    /// The notification tone for a CPaaS template type — Android parity
+    /// (`MyFirebaseMessagingService`): `1` = OTP → OTP tone; `2`/`3` =
+    /// promotional/transactional → promo tone; anything else = the system default.
+    ///
+    /// The custom tones require `vih_tone_otp.caf` / `vih_tone_promo.caf` to be present in the
+    /// bundle that renders the notification — the **app's main bundle** for foreground/local
+    /// notifications, and the **Notification Service Extension's bundle** for backgrounded remote
+    /// pushes. iOS only plays `caf`/`aiff`/`wav` (not mp3), so ship the converted `.caf` files.
+    public static func sound(forTemplateType templateType: String?) -> UNNotificationSound {
+        switch templateType {
+        case "1":
+            return UNNotificationSound(named: UNNotificationSoundName("vih_tone_otp.caf"))
+        case "2", "3":
+            return UNNotificationSound(named: UNNotificationSoundName("vih_tone_promo.caf"))
+        default:
+            return .default
+        }
+    }
+
+    /// Set the per-template tone on a notification's content from its `template_type` payload key.
+    /// Call this from a `UNNotificationServiceExtension` (for backgrounded remote pushes — the
+    /// APNs payload must include `mutable-content: 1`) or before presenting a local notification.
+    public static func applyTone(to content: UNMutableNotificationContent) {
+        let templateType = (content.userInfo["template_type"] as? String)
+            ?? (content.userInfo["templ_typ"] as? String)
+        content.sound = sound(forTemplateType: templateType)
     }
 }

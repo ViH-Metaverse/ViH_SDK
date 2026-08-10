@@ -12,6 +12,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.media.AudioAttributes
+import android.net.Uri
 import android.os.Build
 import android.text.Html
 import android.util.Log
@@ -43,6 +45,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         private const val SUMMARY_NOTIFICATION_ID = 0 // Fixed ID for the summary notification
         private var unreadMessagesCount = 0 // Counter for active notifications
         private val messageLines = mutableListOf<String>() // To show lines in summary
+
+        // Per-template-type notification channels. Channel sound is immutable after creation on
+        // Android O+, so each tone needs its own channel. Bump the suffix if a tone changes.
+        private const val CHANNEL_OTP = "vih_otp_v1"
+        private const val CHANNEL_PROMO_TXN = "vih_promo_txn_v1"
+        private const val CHANNEL_DEFAULT = "custom_channel_v4"
+        private const val SUMMARY_CHANNEL_ID = "vih_summary_v1"
     }
 
     override fun onNewToken(token: String) {
@@ -139,15 +148,14 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 return
             }
         }
-        val channelId = "custom_channel_v4"
-        val channelNameString = "App Custom Notifications"
         val notificationManager = NotificationManagerCompat.from(this)
         val notificationId = System.currentTimeMillis().toInt()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, channelNameString, NotificationManager.IMPORTANCE_HIGH)
-            notificationManager.createNotificationChannel(channel)
-        }
+        // Pick the channel (and thus the notification tone) by CPaaS template type:
+        //   1 = OTP → OTP tone;  2/3 = promotional/transactional → promo tone;  else default.
+        val templateType = data["template_type"] ?: data["templ_typ"]
+        val (channelId, soundRes) = resolveMessageChannel(notificationManager, templateType)
+        ensureSummaryChannel(notificationManager)
 
         val contentPendingIntent = createContentIntent(notificationId, data)
         val deletePendingIntent = createDeleteIntent(notificationId)
@@ -189,6 +197,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setGroup(NOTIFICATION_GROUP_KEY)
 
+        // Pre-Oreo has no channels — set the per-template tone directly on the notification.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && soundRes != 0) {
+            notificationBuilder.setSound(Uri.parse("android.resource://$packageName/$soundRes"))
+        }
+
         addNotificationActions(
             notificationBuilder,
             otp,
@@ -201,18 +214,60 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             .setSummaryText("You have new messages")
         messageLines.forEach { inboxStyle.addLine(it) }
 
-        val summaryNotificationBuilder = NotificationCompat.Builder(this, channelId)
+        // The summary sits on its own silent channel and defers alerting to the child
+        // notification, so the per-template tone plays exactly once.
+        val summaryNotificationBuilder = NotificationCompat.Builder(this, SUMMARY_CHANNEL_ID)
             .setContentTitle("New Messages")
             .setContentText("$unreadMessagesCount unread messages")
             .setSmallIcon(notificationIconRes)
             .setStyle(inboxStyle)
             .setGroup(NOTIFICATION_GROUP_KEY)
             .setGroupSummary(true)
+            .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
             .setAutoCancel(true)
             .setContentIntent(contentPendingIntent)
 
         notificationManager.notify(notificationId, notificationBuilder.build())
         notificationManager.notify(SUMMARY_NOTIFICATION_ID, summaryNotificationBuilder.build())
+    }
+
+    /**
+     * Returns `(channelId, customSoundRawResOrZero)` for the message's CPaaS [templateType] and,
+     * on Android O+, creates that channel with its tone. `1` = OTP → OTP tone; `2`/`3` =
+     * promotional/transactional → promo tone; anything else = the default channel (system tone).
+     */
+    private fun resolveMessageChannel(
+        nm: NotificationManagerCompat,
+        templateType: String?
+    ): Pair<String, Int> {
+        val (channelId, channelName, soundRes) = when (templateType) {
+            "1" -> Triple(CHANNEL_OTP, "OTP", R.raw.vih_tone_otp)
+            "2", "3" -> Triple(CHANNEL_PROMO_TXN, "Promotions & Transactions", R.raw.vih_tone_promo)
+            else -> Triple(CHANNEL_DEFAULT, "App Custom Notifications", 0)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_HIGH)
+            if (soundRes != 0) {
+                val soundUri = Uri.parse("android.resource://$packageName/$soundRes")
+                val attrs = AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                    .build()
+                channel.setSound(soundUri, attrs)
+            }
+            nm.createNotificationChannel(channel)
+        }
+        return channelId to soundRes
+    }
+
+    /** Silent, low-importance channel for the group summary so it never adds a second tone. */
+    private fun ensureSummaryChannel(nm: NotificationManagerCompat) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                SUMMARY_CHANNEL_ID, "Message summary", NotificationManager.IMPORTANCE_LOW
+            ).apply { setSound(null, null) }
+            nm.createNotificationChannel(channel)
+        }
     }
 
     private fun addNotificationActions(
@@ -381,12 +436,20 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                 val customNotificationIcon = Prefs.getInstance(context).notificationIcon
                 val notificationIconRes = if (customNotificationIcon != 0) customNotificationIcon else R.drawable.ic_notification
 
-                val summaryNotificationBuilder = NotificationCompat.Builder(context, "custom_channel_v4")
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    val ch = NotificationChannel(
+                        SUMMARY_CHANNEL_ID, "Message summary", NotificationManager.IMPORTANCE_LOW
+                    ).apply { setSound(null, null) }
+                    notificationManager.createNotificationChannel(ch)
+                }
+
+                val summaryNotificationBuilder = NotificationCompat.Builder(context, SUMMARY_CHANNEL_ID)
                     .setContentTitle("New Messages")
                     .setContentText("$unreadMessagesCount unread messages")
                     .setSmallIcon(notificationIconRes)
                     .setGroup(NOTIFICATION_GROUP_KEY)
                     .setGroupSummary(true)
+                    .setGroupAlertBehavior(NotificationCompat.GROUP_ALERT_CHILDREN)
                     .setAutoCancel(true)
 
                 notificationManager.notify(SUMMARY_NOTIFICATION_ID, summaryNotificationBuilder.build())

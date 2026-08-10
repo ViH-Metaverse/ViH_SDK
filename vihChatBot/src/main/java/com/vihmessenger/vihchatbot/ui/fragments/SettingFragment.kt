@@ -16,16 +16,20 @@ import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.lifecycle.lifecycleScope
 import com.google.gson.Gson
 import com.vihmessenger.vihchatbot.AppController.Companion.prefs
 import com.vihmessenger.vihchatbot.R
 import com.vihmessenger.vihchatbot.constants.BaseAPIConstants.BASE_URL
+import com.vihmessenger.vihchatbot.data.model.SdkFeatureModel
 import com.vihmessenger.vihchatbot.databinding.FragmentSettingBinding
 import com.vihmessenger.vihchatbot.ui.activity.EditSettingsActivity
 import com.vihmessenger.vihchatbot.utils.CustomImageLoader
+import com.vihmessenger.vihchatbot.utils.HomeScreenShortcut
 import com.vihmessenger.vihchatbot.utils.getProfileData
 import com.vihmessenger.vihchatbot.utils.sharedPreference.Prefs
 import com.vihmessenger.vihchatbot.viewmodel.ProfileViewModel
+import kotlinx.coroutines.launch
 
 
 class SettingFragment : BaseFragment() {
@@ -223,6 +227,10 @@ class SettingFragment : BaseFragment() {
                 // Show Delete Account Request dialog
             }
 
+            linear.findViewById<View>(R.id.rvAddShortcut).setOnClickListener {
+                addSdkToHomeScreen()
+            }
+
             linear.findViewById<View>(R.id.rvChangeHashkey).setOnClickListener {
                 showChangeHashkeyDialog()
             }
@@ -281,6 +289,36 @@ class SettingFragment : BaseFragment() {
             activity.startActivity(launchIntent)
         }
         activity.finish()
+    }
+
+    /**
+     * Pin the SDK to the device home screen (opens the chat directly, skipping the host app).
+     * Uses the channel's name/logo from the cached SDK features and the signed-in phone/hashcode.
+     */
+    private fun addSdkToHomeScreen() {
+        val ctx = context ?: return
+        val phone = prefs?.phoneNumber
+        val hashcode = prefs?.hashcode
+        if (phone.isNullOrBlank() || hashcode.isNullOrBlank()) {
+            Toast.makeText(ctx, "Please sign in first.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!HomeScreenShortcut.isSupported(ctx)) {
+            Toast.makeText(
+                ctx, "Your launcher doesn't support home-screen shortcuts.", Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+        val features = try {
+            Gson().fromJson(prefs?.vihSettings, SdkFeatureModel::class.java)
+        } catch (e: Exception) {
+            null
+        }
+        val label = features?.chat_boat_name?.takeIf { it.isNotBlank() } ?: "Chat"
+        val logoUrl = features?.chat_boat_logo
+        viewLifecycleOwner.lifecycleScope.launch {
+            HomeScreenShortcut.pinWithLogo(ctx, phone, hashcode, label, logoUrl)
+        }
     }
 
     /**

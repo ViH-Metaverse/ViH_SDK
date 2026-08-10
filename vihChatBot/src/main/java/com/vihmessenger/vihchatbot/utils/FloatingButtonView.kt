@@ -9,18 +9,24 @@ package com.vihmessenger.vihchatbot.utils
  * - Click action to start an activity with a passed value
  */
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.util.AttributeSet
 import android.util.Patterns
 import android.view.MotionEvent
 import android.view.View
+import android.view.animation.DecelerateInterpolator
+import android.view.animation.OvershootInterpolator
 import androidx.core.content.ContextCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.vihmessenger.vihchatbot.BuildConfig
 import com.vihmessenger.vihchatbot.R
 import com.vihmessenger.vihchatbot.config.VihConfig
@@ -42,6 +48,10 @@ class FloatingButtonView @JvmOverloads constructor(
         private const val DEFAULT_SIZE_DP = 56 // Material design FAB standard size
         private const val DEFAULT_TARGET_ACTIVITY =
             "com.vihmessenger.vihchatbot.ui.activity.home.DashBoardActivity" // <-- CHANGE THIS LINE
+
+        // In-app broadcast the SDK fires (via LocalBroadcastManager) on every received push —
+        // see MyFirebaseMessagingService.handleDataPayload(). The widget listens for it to pop.
+        private const val FCM_MESSAGE_ACTION = "com.vihmessenger.vihchatbot.FCM_MESSAGE"
 
         /**
          * Start the SDK with the provided context and hashcode.
@@ -203,6 +213,81 @@ class FloatingButtonView @JvmOverloads constructor(
     // Button state
     private var isPressed = false
 
+    // --- Custom-integration widget behavior ---
+
+    /** When false, tapping does not launch the SDK itself — the host's OnClickListener handles it
+     *  (e.g. to call [startSdk] with the phone). Default true keeps the built-in launch. */
+    var launchesSdkOnClick: Boolean = true
+
+    /** When true (default), the widget pops (up then back) on each in-app "message received"
+     *  broadcast the SDK fires on an incoming push. */
+    var popOnMessageEnabled: Boolean = true
+
+    /** When true, draw only the center image (no background circle) — for a full-bleed logo/PNG
+     *  such as the client's floating-widget artwork. */
+    var imageOnly: Boolean = false
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    /** Unread-message count shown in a small red badge at the top-right. 0 hides the badge.
+     *  Auto-incremented on each incoming-message broadcast (see [countUnreadOnMessage]) and
+     *  cleared on tap; a host can also set it directly from a real source (e.g. the summed
+     *  chat-list unseen counts). */
+    var unreadCount: Int = 0
+        set(value) {
+            val v = value.coerceAtLeast(0)
+            if (field != v) {
+                field = v
+                invalidate()
+            }
+        }
+
+    /** When true (default), each incoming-message broadcast bumps [unreadCount] by one. Turn off
+     *  if the host drives [unreadCount] itself. */
+    var countUnreadOnMessage: Boolean = true
+
+    /** Show/hide the unread badge without losing the count. */
+    var unreadBadgeEnabled: Boolean = true
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    /** Increase the unread badge by one. */
+    fun incrementUnread() {
+        unreadCount += 1
+    }
+
+    /** Reset the unread badge to zero. */
+    fun clearUnread() {
+        unreadCount = 0
+    }
+
+    private val badgeFillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.parseColor("#E53935") // red
+    }
+    private val badgeRingPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = Color.WHITE
+    }
+    private val badgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.DEFAULT_BOLD
+    }
+
+    // Pops the widget when the SDK broadcasts an incoming message (registered while attached).
+    private val fcmMessageReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != FCM_MESSAGE_ACTION) return
+            if (countUnreadOnMessage) incrementUnread()
+            if (popOnMessageEnabled) popUp()
+        }
+    }
+
     // Preferences instance
     private val prefs: Prefs = Prefs.getInstance(context)
 
@@ -261,44 +346,91 @@ class FloatingButtonView @JvmOverloads constructor(
         setMeasuredDimension(size, size)
     }
 
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        LocalBroadcastManager.getInstance(context)
+            .registerReceiver(fcmMessageReceiver, IntentFilter(FCM_MESSAGE_ACTION))
+    }
+
+    override fun onDetachedFromWindow() {
+        LocalBroadcastManager.getInstance(context).unregisterReceiver(fcmMessageReceiver)
+        super.onDetachedFromWindow()
+    }
+
+    /**
+     * Play the "message received" cue: the widget rises up, then settles back with a slight
+     * overshoot. Triggered automatically on the SDK's incoming-message broadcast (see
+     * [popOnMessageEnabled]); also callable directly.
+     */
+    fun popUp() {
+        animate().cancel()
+        val riseBy = -resources.displayMetrics.density * 18f
+        animate()
+            .translationY(riseBy)
+            .setDuration(150)
+            .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                animate()
+                    .translationY(0f)
+                    .setDuration(280)
+                    .setInterpolator(OvershootInterpolator(3f))
+                    .start()
+            }
+            .start()
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
 
-        // Get dimensions for circle
-        val width = width.toFloat()
-        val height = height.toFloat()
-        val radius = minOf(width, height) / 2f
+        val w = width.toFloat()
+        val h = height.toFloat()
+        val radius = minOf(w, h) / 2f
 
-        // Draw background circle
-        canvas.drawCircle(width / 2f, height / 2f, radius, backgroundPaint)
+        // Background circle — skipped in image-only mode (full-bleed logo/PNG).
+        if (!imageOnly) {
+            canvas.drawCircle(w / 2f, h / 2f, radius, backgroundPaint)
+        }
 
-        // Draw center image if available
+        // Draw center image if available. In image-only mode it's center-inside (aspect
+        // preserved, for non-square artwork); otherwise it's inset ~20% inside the circle.
         centerImage?.let { drawable ->
-            // Make sure the drawable is properly initialized
-            if (drawable.bounds.isEmpty) {
-                // Calculate padding for the image (20% of radius)
+            if (imageOnly) {
+                val iw = drawable.intrinsicWidth.toFloat()
+                val ih = drawable.intrinsicHeight.toFloat()
+                if (iw > 0f && ih > 0f) {
+                    val scale = minOf(width / iw, height / ih)
+                    val dw = (iw * scale).toInt()
+                    val dh = (ih * scale).toInt()
+                    val left = (width - dw) / 2
+                    val top = (height - dh) / 2
+                    drawable.setBounds(left, top, left + dw, top + dh)
+                } else {
+                    drawable.setBounds(0, 0, width, height)
+                }
+            } else {
                 val padding = (radius * 0.2f).toInt()
-
-                // Set bounds for the drawable
-                drawable.setBounds(
-                    padding,
-                    padding,
-                    width.toInt() - padding,
-                    height.toInt() - padding
-                )
+                drawable.setBounds(padding, padding, width - padding, height - padding)
             }
-
-            // Set the alpha to full opacity
             drawable.alpha = 255
-
-            // Save the canvas state before applying transformations
             canvas.save()
-
-            // Draw the image
             drawable.draw(canvas)
-
-            // Restore the canvas to its original state
             canvas.restore()
+        }
+
+        // Unread-message badge — a small red circle at the top-right with the count.
+        if (unreadBadgeEnabled && unreadCount > 0) {
+            val density = resources.displayMetrics.density
+            val label = if (unreadCount > 99) "99+" else unreadCount.toString()
+            val badgeRadius = (if (label.length >= 3) 11f else 9f) * density
+            val cx = w - badgeRadius - 1f * density
+            val cy = badgeRadius + 1f * density
+
+            canvas.drawCircle(cx, cy, badgeRadius + 1.5f * density, badgeRingPaint) // white ring
+            canvas.drawCircle(cx, cy, badgeRadius, badgeFillPaint)                  // red fill
+
+            badgeTextPaint.textSize = badgeRadius * (if (label.length >= 3) 0.9f else 1.15f)
+            val textY = cy - (badgeTextPaint.descent() + badgeTextPaint.ascent()) / 2f
+            canvas.drawText(label, cx, textY, badgeTextPaint)
         }
     }
 
@@ -342,6 +474,13 @@ class FloatingButtonView @JvmOverloads constructor(
 
     override fun performClick(): Boolean {
         super.performClick()
+
+        // Opening the SDK = the user is reading their messages, so clear the unread badge.
+        clearUnread()
+
+        // Host opted to handle the tap itself (e.g. call startSdk with the phone) — don't also
+        // fire the built-in launch.
+        if (!launchesSdkOnClick) return true
 
         try {
             // Create an intent for the DashboardActivity

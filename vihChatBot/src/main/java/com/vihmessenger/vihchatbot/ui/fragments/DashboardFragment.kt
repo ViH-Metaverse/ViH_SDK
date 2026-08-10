@@ -897,21 +897,30 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                 false
             }
         } else {
+            val firstEver = prefs.shortcutPromptCount == 0
             prefs.shortcutPromptCount += 1
             Log.d(
                 TAG,
                 "Shortcut not denied by user. Prompt count incremented to: ${prefs.shortcutPromptCount}"
             )
-            if (prefs.shortcutPromptCount >= 5) { // Changed from 5 to 2 for easier testing, revert if needed
-                Log.i(TAG, "Prompt count reached. Will attempt to prompt for shortcut.")
-                prefs.shortcutPromptCount = 0 // Reset counter for next cycle of prompts
-                true
-            } else {
-                Log.d(
-                    TAG,
-                    "Shortcut prompt count: ${prefs.shortcutPromptCount}/2. Not prompting yet."
-                )
-                false
+            when {
+                firstEver -> {
+                    // Offer immediately on first login (fresh session → count starts at 0).
+                    Log.i(TAG, "First login: prompting for the home-screen shortcut immediately.")
+                    true
+                }
+                prefs.shortcutPromptCount >= 5 -> {
+                    Log.i(TAG, "Prompt count reached. Will attempt to prompt for shortcut again.")
+                    prefs.shortcutPromptCount = 0 // Reset counter for next cycle of reminders
+                    true
+                }
+                else -> {
+                    Log.d(
+                        TAG,
+                        "Shortcut prompt count: ${prefs.shortcutPromptCount}/5. Not prompting yet."
+                    )
+                    false
+                }
             }
         }
 

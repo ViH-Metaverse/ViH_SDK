@@ -1,0 +1,255 @@
+package com.vihmessenger.vihchatbot.discover
+
+import android.content.Context
+import android.content.Intent
+import com.google.gson.Gson
+import com.vihmessenger.vihchatbot.api.services.ApiClient
+import com.vihmessenger.vihchatbot.config.VihConfig
+import com.vihmessenger.vihchatbot.config.VihConfigStore
+import com.vihmessenger.vihchatbot.config.VihNavigation
+import com.vihmessenger.vihchatbot.config.VihTab
+import com.vihmessenger.vihchatbot.config.VihTabId
+import com.vihmessenger.vihchatbot.constants.AppConstants
+import com.vihmessenger.vihchatbot.data.model.EnterPriseModel
+import com.vihmessenger.vihchatbot.data.model.UserProfileRequest
+import com.vihmessenger.vihchatbot.ui.activity.home.ChatActivity
+import com.vihmessenger.vihchatbot.utils.FloatingButtonView
+import com.vihmessenger.vihchatbot.utils.sharedPreference.Prefs
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.Serializable
+
+/**
+ * Public facade for **custom / headless Discover integration** — for hosts that render the
+ * Discover enterprise list in their **own** native UI and deep-link straight into a specific
+ * channel's chat, with the SDK's built-in Discover tab hidden.
+ *
+ * The three moving parts:
+ *  1. [prepareSession] — establish an authenticated session (passwordless phone sign-in) so the
+ *     list + chat endpoints carry a Bearer token, *before* any SDK screen is shown.
+ *  2. [listEnterprises] — fetch the same enterprise list the Discover tab shows, as a flat
+ *     [VihEnterprise] list the host can render however it likes (paged/searchable/filterable).
+ *  3. [openChat] — launch the SDK's chat screen for one enterprise (the "button of their choice"
+ *     on each row).
+ *
+ * The SDK keeps its standard **Discover · Chats · Settings** tabs — this facade only adds the
+ * host-side enterprise list + chat deep-link; it never changes the SDK's own UI.
+ *
+ * All async work is delivered back on the **main thread**. Nothing here requires a custom SDK
+ * build — it wraps the already-shipped networking, session and chat surfaces.
+ */
+object VihDiscover {
+
+    /** Async result callback. Both methods are invoked on the main thread. */
+    interface Callback<T> {
+        fun onSuccess(result: T)
+        fun onError(error: Throwable)
+    }
+
+    /**
+     * A Discover enterprise/channel, flattened to the fields a host list UI needs. Use
+     * [enterpriseId] as the id to pass to [openChat]. [raw] is the full underlying model
+     * (escape hatch for fields not surfaced here).
+     */
+    data class VihEnterprise(
+        /** The chat/enterprise id — `EnterPriseModel.user_id`. Pass this to [openChat]. */
+        val enterpriseId: String,
+        val name: String,
+        val logoUrl: String?,
+        val category: String,
+        val industry: String,
+        val description: String?,
+        val raw: EnterPriseModel,
+    ) : Serializable {
+        companion object {
+            @JvmStatic
+            fun from(model: EnterPriseModel): VihEnterprise = VihEnterprise(
+                enterpriseId = model.user_id,
+                name = model.resolvedDisplayName,
+                logoUrl = model.resolvedLogoUrl,
+                category = model.category,
+                industry = model.industry,
+                description = model.displayNameModel?.description
+                    ?: model.displayNameModel?.display_msg,
+                raw = model,
+            )
+        }
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val gson = Gson()
+
+    /**
+     * Establish an authenticated session for [phone] on channel [hashcode] via the SDK's
+     * passwordless phone sign-in (`account/signup-login/`), persisting the resulting tokens.
+     * Call this once (e.g. when your Discover screen opens) so [listEnterprises] and [openChat]
+     * are authenticated even before any SDK UI has run.
+     *
+     * Switching to a different channel resets the previous channel's stale session first.
+     * [phone] must be digits only, with country code and no `+` (e.g. `"919876543210"`).
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun prepareSession(
+        context: Context,
+        phone: String,
+        hashcode: String,
+        callback: Callback<Unit>? = null,
+    ) {
+        val appContext = context.applicationContext
+        scope.launch {
+            try {
+                val prefs = Prefs.getInstance(appContext)
+                // Reset stale session state if this is a switch to a different channel, then
+                // mark SDK mode and remember the phone — mirrors FloatingButtonView.startSdk.
+                prefs.switchChannel(hashcode)
+                prefs.isSDK = true
+                prefs.phoneNumber = phone
+
+                // prepareSession performs a *fresh* sign-in, so the login request must go out
+                // unauthenticated. On the same channel switchChannel keeps the old session; if
+                // that token is expired, AuthInterceptor would attach it to signup-login and the
+                // server rejects it with 401 token_not_valid. Drop it first.
+                prefs.accessToken = null
+                prefs.refreshToken = null
+
+                val response = withContext(Dispatchers.IO) {
+                    ApiClient.apiService.createUserProfile(
+                        UserProfileRequest(phone, hashcode, prefs.fcmToken ?: "")
+                    )
+                }
+                val body = response.body()
+                if (response.isSuccessful && body != null && body.status) {
+                    prefs.userProfile = gson.toJson(body.data.user)
+                    prefs.accessToken = body.data.access_token
+                    prefs.refreshToken = body.data.refresh
+                    callback?.onSuccess(Unit)
+                } else {
+                    val msg = body?.message?.takeIf { it.isNotBlank() }
+                        ?: "Sign-in failed (HTTP ${response.code()})"
+                    callback?.onError(IllegalStateException(msg))
+                }
+            } catch (t: Throwable) {
+                callback?.onError(t)
+            }
+        }
+    }
+
+    /**
+     * Fetch the Discover enterprise list for channel [hashcode] — the same data the built-in
+     * Discover tab shows, as a flat [VihEnterprise] list for the host to render. The endpoint is
+     * paged: request [page] 1, 2, … and append until a page comes back empty. [search] and
+     * [industries] (comma-separated) narrow the results server-side.
+     *
+     * Requires a session — call [prepareSession] (or launch the SDK once) first.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun listEnterprises(
+        hashcode: String,
+        page: Int = 1,
+        search: String = "",
+        industries: String = "",
+        callback: Callback<List<VihEnterprise>>,
+    ) {
+        scope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    ApiClient.apiService.getEnterpriseDiscoverListResponse(
+                        hashcode, page, search, industries
+                    )
+                }
+                val body = response.body()
+                if (response.isSuccessful && body != null) {
+                    callback.onSuccess(body.data.map { VihEnterprise.from(it) })
+                } else {
+                    callback.onError(
+                        IllegalStateException("Failed to load enterprises (HTTP ${response.code()})")
+                    )
+                }
+            } catch (t: Throwable) {
+                callback.onError(t)
+            }
+        }
+    }
+
+    private const val DASHBOARD_ACTIVITY =
+        "com.vihmessenger.vihchatbot.ui.activity.home.DashBoardActivity"
+
+    /**
+     * Open the SDK's chat screen for one enterprise on channel [hashcode]. [enterpriseId] is the
+     * [VihEnterprise.enterpriseId] (the enterprise's `user_id`); [name] / [logoUrl] pre-fill the
+     * header (optional — the screen self-hydrates from [enterpriseId] if omitted). Pass the full
+     * [enterprise] model to skip the extra details fetch.
+     *
+     * With [landOnDashboard] `true` (default), the SDK's dashboard (the usual **Discover · Chats ·
+     * Settings** tabs) is placed underneath the chat, so backing out of the chat lands on the
+     * SDK's main page — then backing out again returns to your app. This needs the phone from
+     * [prepareSession]; if it's missing, the chat opens standalone (back returns to your list).
+     * Set [landOnDashboard] `false` to always open the chat standalone.
+     *
+     * Requires a session — call [prepareSession] first (otherwise history/sending will fail auth).
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun openChat(
+        context: Context,
+        hashcode: String,
+        enterpriseId: String,
+        name: String? = null,
+        logoUrl: String? = null,
+        enterprise: EnterPriseModel? = null,
+        landOnDashboard: Boolean = true,
+    ) {
+        val prefs = Prefs.getInstance(context.applicationContext)
+        if (prefs.hashcode.isNullOrBlank()) prefs.hashcode = hashcode
+
+        val phone = prefs.phoneNumber
+        if (landOnDashboard && !phone.isNullOrBlank()) {
+            // Land on the standard SDK dashboard (Discover · Chats · Settings) unless the host has
+            // already configured its own tab set. Preserve any host theme.
+            val existing = VihConfigStore.config
+            if (existing?.navigation == null) {
+                VihConfigStore.set(
+                    VihConfig(
+                        theme = existing?.theme,
+                        navigation = VihNavigation(
+                            tabs = listOf(
+                                VihTab(VihTabId.DISCOVER),
+                                VihTab(VihTabId.CHATS),
+                                VihTab(VihTabId.SETTINGS)
+                            )
+                        )
+                    )
+                )
+            }
+            // Push the dashboard first so it sits under the chat in the back stack.
+            context.startActivity(
+                Intent().apply {
+                    setClassName(context, DASHBOARD_ACTIVITY)
+                    putExtra(AppConstants.HASHCODE_EXTRA, hashcode)
+                    putExtra(AppConstants.PHONENUMBER, phone)
+                }
+            )
+        }
+        ChatActivity.startIntent(context, "", name, logoUrl, enterprise, enterpriseId, hashcode)
+    }
+
+    /** Convenience [openChat] overload taking a [VihEnterprise]. */
+    @JvmStatic
+    @JvmOverloads
+    fun openChat(
+        context: Context,
+        hashcode: String,
+        enterprise: VihEnterprise,
+        landOnDashboard: Boolean = true,
+    ) {
+        openChat(
+            context, hashcode, enterprise.enterpriseId,
+            enterprise.name, enterprise.logoUrl, enterprise.raw, landOnDashboard
+        )
+    }
+}
