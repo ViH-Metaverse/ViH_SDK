@@ -23,9 +23,14 @@ open class BaseViewController: UIViewController, LoaderHost, ThemeAware {
         return overlay
     }()
 
+    /// Snapshot masking + capture monitoring. Retained for the controller's lifetime so its
+    /// notification observers stay registered (VAPT F-09).
+    private var screenCapturePolicy: ScreenCapturePolicy?
+
     open override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
+        screenCapturePolicy = ScreenCapturePolicy.install(on: self)
         initViewModels()
         initView()
         setObservers()

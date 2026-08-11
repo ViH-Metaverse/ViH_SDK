@@ -3,7 +3,7 @@ package com.vihmessenger.vihchatbot
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.provider.FontRequest
 import androidx.emoji.text.EmojiCompat
@@ -17,6 +17,7 @@ import com.google.firebase.FirebaseApp
 import org.json.JSONObject
 import com.vanniktech.emoji.EmojiManager
 import com.vanniktech.emoji.googlecompat.GoogleCompatEmojiProvider
+import com.vihmessenger.vihchatbot.config.VihConfigStore
 import com.vihmessenger.vihchatbot.data.services.BaseCloudAPIService
 import com.vihmessenger.vihchatbot.utils.DynamicThemeManager
 import com.vihmessenger.vihchatbot.utils.NetworkConnectivityManager
@@ -34,6 +35,43 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
         private var currentActivityCount = 0
         fun isAppInForeground(): Boolean {
             return currentActivityCount > 0
+        }
+
+        @Volatile
+        private var diagnosticsStarted = false
+
+        /**
+         * Starts Bugfender iff the host app opted in via [VihConfig.diagnostics]. Called by
+         * [VihConfigStore.set] rather than from `onCreate`, because the host's config does not
+         * exist yet at Application-create time — initialising there would have made the
+         * opt-in permanently inert.
+         *
+         * Idempotent: a host that re-enters the SDK with a new config will not re-init.
+         */
+        @JvmStatic
+        fun applyDiagnosticsConfig() {
+            if (diagnosticsStarted) return
+            val app = appController ?: return
+            val diagnostics = VihConfigStore.config?.diagnostics ?: return
+            val wantsLogging = diagnostics.remoteLoggingEnabled
+            val wantsCrashes = diagnostics.crashReportingEnabled
+            if (!wantsLogging && !wantsCrashes) return
+
+            val bugfenderKey = BuildConfig.BUGFENDER_KEY
+            if (bugfenderKey.isEmpty()) {
+                VihLog.w(TAG, "Diagnostics opted in but no Bugfender key configured — skipping.")
+                return
+            }
+
+            diagnosticsStarted = true
+            Bugfender.init(app, bugfenderKey, BuildConfig.DEBUG)
+            if (wantsCrashes) Bugfender.enableCrashReporting()
+            // UI-event and logcat capture sweep up whatever else is on screen or in the log,
+            // which we cannot vet — debug builds only, and only when logging was opted into.
+            if (wantsLogging && BuildConfig.DEBUG) {
+                Bugfender.enableUIEventLogging(app)
+                Bugfender.enableLogcatLogging()
+            }
         }
     }
 
@@ -63,17 +101,11 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
                 )
             )
         )
-        // SECURITY: Bugfender key loaded from BuildConfig (sourced from local.properties)
-        val bugfenderKey = BuildConfig.BUGFENDER_KEY
-        if (bugfenderKey.isNotEmpty()) {
-            Bugfender.init(this, bugfenderKey, BuildConfig.DEBUG)
-            Bugfender.enableCrashReporting()
-            // SECURITY: Only enable verbose logging in debug builds to prevent data exfiltration
-            if (BuildConfig.DEBUG) {
-                Bugfender.enableUIEventLogging(this)
-                Bugfender.enableLogcatLogging()
-            }
-        }
+        // SECURITY (VAPT F-14): diagnostics are NOT started here. Bugfender is a third-party
+        // remote log/crash processor, and in an SDK embedded in someone else's app that data
+        // flow is the host operator's decision. It is opt-in via VihConfig.diagnostics and is
+        // started from [applyDiagnosticsConfig], which VihConfigStore.set invokes once the
+        // host has actually supplied a config. No config supplied => nothing leaves the device.
 
         DynamicThemeManager.loadSavedTheme(this)
 
@@ -90,7 +122,7 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
         val clientId = BuildConfig.COGNITO_APP_CLIENT_ID
         val region = BuildConfig.COGNITO_REGION
         if (poolId.isEmpty() || clientId.isEmpty()) {
-            Log.w(TAG, "Cognito not configured for this build — skipping Amplify init.")
+            VihLog.w(TAG, "Cognito not configured for this build — skipping Amplify init.")
             return
         }
         try {
@@ -120,9 +152,9 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
             )
             Amplify.addPlugin(AWSCognitoAuthPlugin())
             Amplify.configure(AmplifyConfiguration.builder(config).build(), applicationContext)
-            Log.i(TAG, "Amplify Auth (Cognito) configured.")
+            VihLog.i(TAG, "Amplify Auth (Cognito) configured.")
         } catch (e: AmplifyException) {
-            Log.e(TAG, "Amplify init failed: ${e.message}", e)
+            VihLog.e(TAG, "Amplify init failed: ${e.message}", e)
         }
     }
 

@@ -19,6 +19,11 @@ object AppConstants {
     const val VIEW_TYPE_DATE_HEADER = "VIEW_TYPE_DATE_HEADER"
     const val IS_SDK_MODE = "is_sdk_mode"
 
+    // True when the host app drives the SDK headlessly (VihDiscover.prepareSession)
+    // rather than launching the SDK's own splash. Governs whether an unrecoverable
+    // session expiry may relaunch the application — see BaseRepository.
+    const val IS_HOST_DRIVEN = "is_host_driven"
+
 
     const val ID = "ID"
     const val CHANNEL_NAME = "CHANNEL_NAME"

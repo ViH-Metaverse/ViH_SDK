@@ -227,8 +227,12 @@
             android:orientation="vertical">
 
             <LinearLayout
+                android:id="@+id/rowPromotional"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:padding="@dimen/_8sdp">
@@ -241,6 +245,7 @@
                     android:src="@drawable/ic_opt_out" />
 
                 <TextView
+                    android:id="@+id/tvPromotional"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="@dimen/_10sdp"
@@ -250,8 +255,39 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/rowMute"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:padding="@dimen/_8sdp">
+
+                <ImageView
+                    android:layout_width="@dimen/_20sdp"
+                    android:layout_height="@dimen/_20sdp"
+                    android:contentDescription="mute icon"
+                    android:src="@drawable/ic_mute" />
+
+                <TextView
+                    android:id="@+id/tvMute"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/_10sdp"
+                    android:fontFamily="@font/rubik_regular"
+                    android:text="Mute notifications"
+                    android:textColor="@color/defaultTextColor" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/rowBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="?attr/selectableItemBackground"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center_vertical"
                 android:orientation="horizontal"
                 android:padding="@dimen/_8sdp">
@@ -263,6 +299,7 @@
                     android:src="@drawable/ic_block" />
 
                 <TextView
+                    android:id="@+id/tvBlock"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="@dimen/_10sdp"

@@ -54,10 +54,13 @@ public final class DiscoverViewController: BaseViewController, UITableViewDataSo
     public override func setObservers() {
         cancellables.append(viewModel.enterprisesDiscoverListLiveData.observe { [weak self] response in
             guard let self = self else { return }
+            // Hide enterprises the channel owner has blacklisted. The backend still returns
+            // them (and rejects sends with 2001), so filter before rendering. (Mirror Android.)
+            let visible = response.data.filter { $0.isBlacklistedByChannel != true }
             if self.page == 1 {
-                self.items = response.data
+                self.items = visible
             } else {
-                self.items.append(contentsOf: response.data)
+                self.items.append(contentsOf: visible)
             }
             self.tableView.reloadData()
         })

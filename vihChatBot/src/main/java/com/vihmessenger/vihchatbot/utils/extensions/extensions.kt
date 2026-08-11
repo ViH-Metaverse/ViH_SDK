@@ -20,7 +20,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.view.Window
 import android.view.WindowManager
@@ -48,6 +48,7 @@ import java.net.URL
 import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.util.Locale
+import com.vihmessenger.vihchatbot.utils.ExternalUrl
 
 
 fun Context.resizeDrawable(drawableId: Int, width: Int, height: Int): Drawable? {
@@ -78,7 +79,7 @@ fun Activity.statusBarGradient() { // Or whatever parameters it takes
         // For API 30 and above
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         controller.isAppearanceLightStatusBars = isGradientEffectivelyLight
-        Log.d(
+        VihLog.d(
             "StatusBarIconDebug",
             "statusBarGradient (Activity: ${this.javaClass.simpleName}), API R+: isAppearanceLightStatusBars set to $isGradientEffectivelyLight"
         )
@@ -88,13 +89,13 @@ fun Activity.statusBarGradient() { // Or whatever parameters it takes
         var flags = decorView.systemUiVisibility
         if (isGradientEffectivelyLight) {
             flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-            Log.d(
+            VihLog.d(
                 "StatusBarIconDebug",
                 "statusBarGradient (Activity: ${this.javaClass.simpleName}), API M+: Adding SYSTEM_UI_FLAG_LIGHT_STATUS_BAR"
             )
         } else {
             flags = flags and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
-            Log.d(
+            VihLog.d(
                 "StatusBarIconDebug",
                 "statusBarGradient (Activity: ${this.javaClass.simpleName}), API M+: Clearing SYSTEM_UI_FLAG_LIGHT_STATUS_BAR"
             )
@@ -150,10 +151,10 @@ fun Drawable.setColorFilterOpacityCompat() {
                 PorterDuff.Mode.SRC_OVER
             )
             this.alpha = 50
-            Log.d("TAG", "setColorFilterOpacityCompat: ")
+            VihLog.d("TAG", "setColorFilterOpacityCompat: ")
 
         } catch (e: Exception) {
-            Log.d("TAG", "setColorFilterOpacityCompat: ${e.toString()}")
+            VihLog.d("TAG", "setColorFilterOpacityCompat: ${e.toString()}")
         }
     }
 }
@@ -365,7 +366,7 @@ fun Context.shareVideo(videoPath: String?, context: Context) {
     val videoFile = File(videoPath)
     if (!videoFile.exists()) {
         Toast.makeText(this, "Video file not found for sharing.", Toast.LENGTH_SHORT).show()
-        Log.e("ContextExtShareVideo", "File not found: $videoPath")
+        VihLog.e("ContextExtShareVideo", "File not found: $videoPath")
         return
     }
 
@@ -378,14 +379,14 @@ fun Context.shareVideo(videoPath: String?, context: Context) {
         }
         startActivity(Intent.createChooser(shareIntent, "Share Video"))
     } catch (e: IllegalArgumentException) {
-        Log.e(
+        VihLog.e(
             "ContextExtShareVideo",
             "FileProvider setup issue for path: ${videoFile.absolutePath}. Check authority and file_paths.xml.",
             e
         )
         Toast.makeText(this, "Could not share video. Setup error.", Toast.LENGTH_LONG).show()
     } catch (e: Exception) {
-        Log.e("ContextExtShareVideo", "Error sharing video", e)
+        VihLog.e("ContextExtShareVideo", "Error sharing video", e)
         Toast.makeText(this, "Error sharing video: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
     }
 }
@@ -398,7 +399,7 @@ fun Context.saveVideoToGallery(videoPath: String?) {
     val videoFile = File(videoPath)
     if (!videoFile.exists()) {
         Toast.makeText(this, "Video file not found to save.", Toast.LENGTH_SHORT).show()
-        Log.e("ContextExtSaveVideo", "File not found: $videoPath")
+        VihLog.e("ContextExtSaveVideo", "File not found: $videoPath")
         return
     }
 
@@ -444,7 +445,7 @@ fun Context.saveVideoToGallery(videoPath: String?) {
         }
 
     } catch (e: Exception) {
-        Log.e("ContextExtSaveVideo", "Error saving video to gallery", e)
+        VihLog.e("ContextExtSaveVideo", "Error saving video to gallery", e)
         Toast.makeText(this, "Error saving video: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
     }
 }
@@ -465,14 +466,12 @@ fun Context.openUrlWithBrowserChoice(
     chooserTitle: String = "Open with"
 ) {
     try {
-        // Ensure the URL has a proper protocol
-        val formattedUrl = if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            "https://$url"
-        } else {
-            url
+        // SECURITY (VAPT F-16): allowlist the scheme and upgrade http -> https rather than
+        // trusting a prefix check on a server-supplied string.
+        val webpage = ExternalUrl.sanitize(url) ?: run {
+            Toast.makeText(this, "Invalid link", Toast.LENGTH_SHORT).show()
+            return
         }
-
-        val webpage = Uri.parse(formattedUrl)
 
         // Create an intent specifically for viewing web pages
         val intent = Intent(Intent.ACTION_VIEW, webpage).apply {
@@ -499,7 +498,7 @@ fun Context.openUrlWithBrowserChoice(
             }
         }
 
-        Log.d("OpenUrlDebug", "Installed browsers: $installedBrowsers")
+        VihLog.d("OpenUrlDebug", "Installed browsers: $installedBrowsers")
 
         when {
             // If multiple browsers are installed, show chooser

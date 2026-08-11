@@ -56,14 +56,22 @@ public final class SplashViewController: BaseViewController {
         let prefs = VihChatBotSDK.shared.prefs
 
         // Never signed in on this device → onboarding.
-        guard let phone = prefs?.phoneNumber, !phone.isEmpty else {
+        //
+        // The gate is "is there any evidence of a session", NOT "do we have a phone number".
+        // Email-OTP is the identity here and such accounts may legitimately have no mobile,
+        // so keying off the phone alone sent verified users back to the OTP screen while a
+        // perfectly good 30-day Cognito session was still sitting in Amplify's store.
+        guard hasExistingSession(prefs) else {
             await route(authenticated: false)
             return
         }
 
         switch await EmailOtpAuth.restoreSession() {
         case .token(let idToken):
-            let exchanged = await performSilentExchange(idToken: idToken, mobile: phone)
+            let exchanged = await performSilentExchange(
+                idToken: idToken,
+                mobile: prefs?.phoneNumber ?? ""
+            )
             // On success we have fresh tokens; otherwise stay in only if a token still exists.
             let hasToken = !(prefs?.accessToken?.isEmpty ?? true)
             await route(authenticated: exchanged || hasToken)
@@ -79,6 +87,18 @@ public final class SplashViewController: BaseViewController {
             let hasToken = !(prefs?.accessToken?.isEmpty ?? true)
             await route(authenticated: hasToken)
         }
+    }
+
+    /// True when this install has any trace of a prior sign-in. Any one of these is enough to be
+    /// worth asking Cognito for a session; only a device with none of them is genuinely new.
+    private func hasExistingSession(_ prefs: Prefs?) -> Bool {
+        let candidates = [
+            prefs?.accessToken,
+            prefs?.refreshToken,
+            prefs?.userProfile,
+            prefs?.phoneNumber
+        ]
+        return candidates.contains { !($0 ?? "").isEmpty }
     }
 
     /// Re-runs the backend exchange with a fresh Cognito ID token; persists new app tokens.
@@ -102,7 +122,13 @@ public final class SplashViewController: BaseViewController {
                let json = String(data: encoded, encoding: .utf8) {
                 prefs?.userProfile = json
             }
-            prefs?.phoneNumber = data.user.mobile
+            // Only ever widen what we know. A blank mobile in the response must not erase a
+            // good stored one: the exchange echoes back whatever we sent, so overwriting
+            // unconditionally let one empty value persist itself and log the user out for good.
+            let freshMobile = data.user.mobile
+            if !freshMobile.isEmpty {
+                prefs?.phoneNumber = freshMobile
+            }
             return true
         } catch {
             CorrelationLogger.warn(message: "silent email-login exchange failed: \(error.localizedDescription)")

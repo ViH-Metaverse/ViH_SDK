@@ -10,38 +10,90 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 /**
- * A modern, singleton Retrofit API client.
+ * The SDK's single HTTP stack.
  *
- * SECURITY improvements:
- * - Certificate pinning for API domains
- * - Auth interceptor for centralized token management
- * - HTTP logging only in debug builds
+ * SECURITY (VAPT F-03 / F-10): there used to be two clients — this one and
+ * `BaseCloudAPIService` — and the security controls were only ever wired into this one
+ * while the SDK actually issued its traffic through the other. Both now share
+ * [okHttpClient], so there is exactly one place to configure pinning, auth and logging,
+ * and no way to add a control to "the client" and miss half the traffic.
+ *
+ * Controls applied here:
+ *  - certificate pinning ([certificatePinner]) — enforced, not commented out
+ *  - centralised bearer-token injection ([AuthInterceptor])
+ *  - HTTP body logging only in debug builds
  */
 object ApiClient {
 
-    // SECURITY: Certificate pinning to prevent MITM attacks
-    // NOTE: Replace the placeholder pin hashes with your actual server certificate SHA-256 pins.
-    // You can obtain them by running: openssl s_client -connect vihapi.plugseal.com:443 | openssl x509 -pubkey -noout | openssl pkey -pubin -outform der | openssl dgst -sha256 -binary | openssl enc -base64
-    private val certificatePinner: CertificatePinner by lazy {
+    /**
+     * SHA-256 SubjectPublicKeyInfo pins for the VIH API hosts.
+     *
+     * **These are CA pins, not leaf pins, and that is deliberate.** Both hosts sit behind
+     * AWS Certificate Manager, which auto-renews and generates a *new key pair* at each
+     * renewal — pinning the leaf would hard-fail every shipped client the moment ACM
+     * rotated (the production leaf expires 2026-11-28, roughly three months out). Pinning
+     * the issuing intermediate plus `Amazon Root CA 1` survives rotation while still
+     * defeating the threat this control exists for: a user- or MDM-installed CA performing
+     * interception. A Burp/mitmproxy CA does not chain to Amazon Root CA 1, so it fails.
+     *
+     * `Amazon Root CA 1` is the backup pin — valid until 2037, and it keeps clients working
+     * if AWS moves a host to a different `Amazon RSA 2048 Mxx` intermediate. OkHttp accepts
+     * the connection when *any* certificate in the chain matches *any* pin for the host.
+     *
+     * Regenerate with:
+     * ```
+     * openssl s_client -connect <host>:443 -servername <host> -showcerts </dev/null \
+     *   | openssl x509 -pubkey -noout \
+     *   | openssl pkey -pubin -outform der \
+     *   | openssl dgst -sha256 -binary | openssl enc -base64
+     * ```
+     */
+    internal val certificatePinner: CertificatePinner by lazy {
         CertificatePinner.Builder()
-            // TODO: Replace these placeholder pins with actual certificate SHA-256 pins for your domains
-            // .add("vihapi.plugseal.com", "sha256/yVsNAcVu753A+RkSN87Tw1NVDV7moS77Wp0KIMnBUBk=")
-            // .add("stagingnlp.vihmessenger.com", "sha256/vbjMRUxLfavtd+3+GPgx+mtIcTtK1wgv4HS3yHrsCac=")
+            // Production — Amazon RSA 2048 M04 (issuing intermediate)
+            .add(
+                "api.platform.vihresearchlabs.ai",
+                "sha256/G9LNNAql897egYsabashkzUCTEJkWBzgoEtk8X/678c="
+            )
+            // Production — Amazon Root CA 1 (backup, survives intermediate rotation)
+            .add(
+                "api.platform.vihresearchlabs.ai",
+                "sha256/++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI="
+            )
+            // Staging — Amazon RSA 2048 M01 (issuing intermediate)
+            .add(
+                "api.dev.platform.vihresearchlabs.ai",
+                "sha256/DxH4tt40L+eduF6szpY6TONlxhZhBd+pJ9wbHlQ2fuw="
+            )
+            // Staging — Amazon Root CA 1 (backup)
+            .add(
+                "api.dev.platform.vihresearchlabs.ai",
+                "sha256/++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI="
+            )
             .build()
     }
 
-    // Private OkHttpClient with security configurations
-    private val okHttpClient: OkHttpClient by lazy {
+    /**
+     * The one OkHttp client the SDK uses. Internal so [com.vihmessenger.vihchatbot.data
+     * .services.BaseCloudAPIService] can share it rather than building its own unprotected
+     * one.
+     */
+    internal val okHttpClient: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
-            // SECURITY: Centralized auth token injection
+            // SECURITY: centralised auth token injection
             .addInterceptor(AuthInterceptor())
-            // SECURITY: Certificate pinning (uncomment when pins are configured)
-            // .certificatePinner(certificatePinner)
+            // Renew the session in-place when the backend returns 401. The access token
+            // lives one hour and there is no refresh-exchange endpoint, so without this an
+            // hour-old session fails every call. See [VihTokenAuthenticator].
+            .authenticator(VihTokenAuthenticator())
+            // SECURITY: certificate pinning — enforced for the hosts above; hosts without a
+            // pin entry fall back to normal platform trust validation.
+            .certificatePinner(certificatePinner)
             .also { client ->
-                // SECURITY: Enable logging only in DEBUG mode to prevent leaking sensitive data
+                // SECURITY: body logging only in debug builds — it prints bearer tokens.
                 if (BuildConfig.DEBUG) {
                     val logging = HttpLoggingInterceptor()
                     logging.setLevel(HttpLoggingInterceptor.Level.BODY)
@@ -51,7 +103,6 @@ object ApiClient {
             .build()
     }
 
-    // Private Retrofit instance
     private val retrofit: Retrofit by lazy {
         Retrofit.Builder()
             .baseUrl(BuildConfig.API_BASE_URL)
@@ -60,7 +111,6 @@ object ApiClient {
             .build()
     }
 
-    // Public service instance that the rest of the app will use
     val apiService: ApiService by lazy {
         retrofit.create(ApiService::class.java)
     }

@@ -16,7 +16,7 @@ import android.media.AudioAttributes
 import android.net.Uri
 import android.os.Build
 import android.text.Html
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.Toast
@@ -37,6 +37,7 @@ import com.vihmessenger.vihchatbot.utils.sharedPreference.Prefs
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.regex.Pattern
+import com.vihmessenger.vihchatbot.utils.SecureClipboard
 
 class MyFirebaseMessagingService : FirebaseMessagingService() {
 
@@ -58,7 +59,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
         super.onNewToken(token)
         // SECURITY: Only log tokens in debug builds
         if (BuildConfig.DEBUG) {
-            Log.d("FIREBASE_TOKEN", "New token: $token")
+            VihLog.d("FIREBASE_TOKEN", "New token: ${VihLog.redact(token)}")
         }
         sendRegistrationTokenToServer(token)
     }
@@ -144,7 +145,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
                 PackageManager.PERMISSION_GRANTED
             ) {
-                Log.w("FCM_PERMISSION", "POST_NOTIFICATIONS permission not granted. Cannot show notification.")
+                VihLog.w("FCM_PERMISSION", "POST_NOTIFICATIONS permission not granted. Cannot show notification.")
                 return
             }
         }
@@ -332,7 +333,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             BitmapFactory.decodeStream(input).also { connection.disconnect() }
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) {
-                Log.e("FCM_IMG_DOWNLOAD", "Error downloading image", e)
+                VihLog.e("FCM_IMG_DOWNLOAD", "Error downloading image", e)
             }
             null
         }
@@ -382,7 +383,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
     override fun onDestroy() {
         super.onDestroy()
         if (BuildConfig.DEBUG) {
-            Log.d("FIREBASE_SERVICE", "MyFirebaseMessagingService destroyed.")
+            VihLog.d("FIREBASE_SERVICE", "MyFirebaseMessagingService destroyed.")
         }
     }
 
@@ -399,9 +400,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
             val notificationIdToCancel = intent.getIntExtra(EXTRA_NOTIFICATION_ID, -1)
 
             if (!otpToCopy.isNullOrBlank()) {
-                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("OTP", otpToCopy))
-                // SECURITY: Don't expose OTP value in Toast
+                // SECURITY (VAPT F-08): sensitive, self-expiring clip; value never shown in the Toast.
+                SecureClipboard.copySensitive(context, "OTP", otpToCopy)
                 Toast.makeText(context, "OTP copied to clipboard", Toast.LENGTH_SHORT).show()
 
                 if (notificationIdToCancel != -1) {
@@ -428,7 +428,7 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
 
             unreadMessagesCount--
             if (BuildConfig.DEBUG) {
-                Log.d("FCM_DISMISS", "Notification dismissed. Remaining count: $unreadMessagesCount")
+                VihLog.d("FCM_DISMISS", "Notification dismissed. Remaining count: $unreadMessagesCount")
             }
 
             val notificationManager = NotificationManagerCompat.from(context)

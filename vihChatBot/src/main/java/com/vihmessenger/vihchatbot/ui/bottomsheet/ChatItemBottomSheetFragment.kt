@@ -22,29 +22,24 @@ class ChatItemBottomSheetFragment : BaseBottomSheetDialog() {
     private lateinit var listAdapter: ChatItemBottomSheetListAdapter
     private var chatModel: ChatListModel? = null
 
+    // Host-provided actions. The sheet is transient, so it only reports the choice; the host
+    // (ChatListFragment) owns a longer-lived ViewModel that performs the mutation and refreshes.
+    var onMuteSelected: ((ChatListModel) -> Unit)? = null
+    var onBlockSelected: ((ChatListModel) -> Unit)? = null
 
-    private val listItems = listOf(
-        ListItem(
-            id = 1,
-            title = "Delete",
-            iconResId = R.drawable.ic_delete
-        ),
-        ListItem(
-            id = 2,
-            title = "Pin",
-            iconResId = R.drawable.ic_pin
-        ),
-        ListItem(
-            id = 3,
-            title = "Mute",
-            iconResId = R.drawable.ic_mute
-        ),
-        ListItem(
-            id = 4,
-            title = "Block",
-            iconResId = R.drawable.ic_block
+    // Built from [chatModel] state so Mute/Block flip to Unmute/Unblock when already applied.
+    private var listItems: List<ListItem> = emptyList()
+
+    private fun buildListItems(): List<ListItem> {
+        val muted = chatModel?.enterprise?.is_muted_by_user == true
+        val blocked = chatModel?.enterprise?.is_blacklisted_by_user == true
+        return listOf(
+            ListItem(id = 1, title = "Delete", iconResId = R.drawable.ic_delete),
+            ListItem(id = 2, title = "Pin", iconResId = R.drawable.ic_pin),
+            ListItem(id = 3, title = if (muted) "Unmute" else "Mute", iconResId = R.drawable.ic_mute),
+            ListItem(id = 4, title = if (blocked) "Unblock" else "Block", iconResId = R.drawable.ic_block)
         )
-    )
+    }
 
     override fun getHeightPercentage(): Float = 0.45f
 
@@ -71,6 +66,7 @@ class ChatItemBottomSheetFragment : BaseBottomSheetDialog() {
     }
 
     override fun setupViews(view: View) {
+        listItems = buildListItems()
         listAdapter = ChatItemBottomSheetListAdapter(requireContext(), listItems)
         binding.listView.adapter = listAdapter
 
@@ -97,20 +93,19 @@ class ChatItemBottomSheetFragment : BaseBottomSheetDialog() {
     }
 
     private fun onItemSelected(item: ListItem) {
-        Toast.makeText(context, "Selected: ${item.title}", Toast.LENGTH_SHORT).show()
-
+        val chat = chatModel
         when (item.id) {
-            1 -> { /* Handle share */
+            1 -> { /* Delete — not yet implemented */
+                Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show()
             }
 
-            2 -> { /* Handle download */
+            2 -> { /* Pin — not yet implemented */
+                Toast.makeText(context, "Coming soon", Toast.LENGTH_SHORT).show()
             }
 
-            3 -> { /* Handle edit */
-            }
+            3 -> chat?.let { onMuteSelected?.invoke(it) }   // Mute / Unmute
 
-            4 -> { /* Handle delete */
-            }
+            4 -> chat?.let { onBlockSelected?.invoke(it) }  // Block / Unblock
         }
         dismiss()
     }

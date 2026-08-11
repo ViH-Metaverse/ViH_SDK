@@ -3,7 +3,6 @@ package com.vihmessenger.vihchatbot.utils
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color
-import android.util.Log
 import android.util.TypedValue
 import com.vihmessenger.vihchatbot.R
 
@@ -183,7 +182,7 @@ object DynamicThemeManager {
 
             setThemeColors(context, primary, secondary, primaryText, secondaryText, header, defaultText)
         } catch (e: Exception) {
-            Log.e(TAG, "Invalid color format", e)
+            VihLog.e(TAG, "Invalid color format", e)
         }
     }
 
@@ -205,7 +204,7 @@ object DynamicThemeManager {
         fun parse(hex: String?): Int? = try {
             hex?.let { Color.parseColor(it) }
         } catch (e: Exception) {
-            Log.e(TAG, "Invalid host override color: $hex", e); null
+            VihLog.e(TAG, "Invalid host override color: $hex", e); null
         }
 
         parse(primaryHex)?.let { primaryColor = it; changed = true }

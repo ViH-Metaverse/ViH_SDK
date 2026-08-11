@@ -95,4 +95,25 @@ public final class HomeRepository: BaseRepository {
             try await self.apiService.userLogout(refreshToken: refreshToken)
         }
     }
+
+    /// Block/unblock this enterprise for the current user.
+    public func blacklistEnterprise(showBlockingLoader: Bool, enterprisePk: Int, blacklist: Bool) async throws -> GenericStatusResponse {
+        try await doSafeAPIRequest(showBlockingLoader: showBlockingLoader) {
+            try await self.apiService.blacklistEnterprise(enterprisePk: enterprisePk, blacklist: blacklist)
+        }
+    }
+
+    /// Mute/unmute this enterprise for the current (user, channel).
+    public func muteEnterprise(showBlockingLoader: Bool, enterpriseId: Int, muteStatus: Bool) async throws -> GenericStatusResponse {
+        try await doSafeAPIRequest(showBlockingLoader: showBlockingLoader) {
+            try await self.apiService.muteEnterprise(enterpriseId: enterpriseId, muteStatus: muteStatus)
+        }
+    }
+
+    /// Set promotional opt-in (inverse of the is_promotional_message_blocked read flag).
+    public func updateEnterprisePromotional(showBlockingLoader: Bool, optIn: Bool, enterpriseId: Int, channelId: String) async throws -> GenericStatusResponse {
+        try await doSafeAPIRequest(showBlockingLoader: showBlockingLoader) {
+            try await self.apiService.updateEnterprisePromotional(optIn: optIn, enterpriseId: enterpriseId, channelId: channelId)
+        }
+    }
 }

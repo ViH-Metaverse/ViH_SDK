@@ -2,7 +2,7 @@ package com.vihmessenger.vihchatbot.data.repository
 
 import BaseActivity
 import android.content.Intent
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.widget.Toast
 import com.vihmessenger.vihchatbot.AppController
 import com.vihmessenger.vihchatbot.data.services.BaseApiService
@@ -50,7 +50,7 @@ open class BaseRepository(
         return when (result) {
             is Results.Success -> result.data
             is Results.Error -> {
-                Log.e("BaseRepository", "API Error: ${result.error}")
+                VihLog.e("BaseRepository", "API Error: ${result.error}")
 
                 if (result.error == AUTH_FAILED_ERROR) {
                     handleSessionExpired()
@@ -85,6 +85,19 @@ open class BaseRepository(
         val prefs = AppController.prefs
         prefs?.accessToken = null
         prefs?.refreshToken = null
+
+        // A headless host (VihDiscover.prepareSession) owns its own navigation. Relaunching
+        // its launcher activity with CLEAR_TASK — which is the right move when the SDK owns
+        // the app — instead wipes the host's task stack, so the app appears to close and
+        // restart on its own home screen. Clear the dead session and let the error surface
+        // to the caller instead; the host re-establishes it with another prepareSession.
+        if (prefs?.isHostDriven == true) {
+            VihLog.w(
+                "BaseRepository",
+                "Session expired in host-driven mode — cleared tokens, not relaunching host"
+            )
+            return
+        }
 
         val app = AppController.appController ?: return
         baseActivity?.runOnUiThread {
@@ -141,7 +154,7 @@ open class BaseRepository(
                 else -> e.localizedMessage ?: "An unexpected error occurred"
             }
 
-            Log.e("BaseRepository", "API Exception: ${e.javaClass.simpleName} - $errorMessage")
+            VihLog.e("BaseRepository", "API Exception: ${e.javaClass.simpleName} - $errorMessage")
             return Results.Error(errorMessage)
         }
     }

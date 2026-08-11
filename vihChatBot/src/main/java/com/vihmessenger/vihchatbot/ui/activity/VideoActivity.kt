@@ -13,7 +13,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.view.WindowManager
 import android.webkit.MimeTypeMap
@@ -91,12 +91,12 @@ class VideoActivity : BaseActivity() {
                     "Media URL or type is invalid.",
                     Toast.LENGTH_SHORT
                 ).show()
-                Log.w(TAG, "startIntent: mediaUrl or mediaType is null or empty.")
+                VihLog.w(TAG, "startIntent: mediaUrl or mediaType is null or empty.")
                 return
             }
             if (mediaType != MEDIA_TYPE_VIDEO && mediaType != MEDIA_TYPE_IMAGE) {
                 Toast.makeText(context, "Unsupported media type.", Toast.LENGTH_SHORT).show()
-                Log.w(TAG, "startIntent: Unsupported mediaType: $mediaType")
+                VihLog.w(TAG, "startIntent: Unsupported mediaType: $mediaType")
                 return
             }
 
@@ -121,7 +121,7 @@ class VideoActivity : BaseActivity() {
         channel = getIntentChannel()
 
         if (mediaUrl.isNullOrEmpty() || mediaType.isNullOrEmpty()) {
-            Log.e(TAG, "Media URL or Type is missing in onCreate.")
+            VihLog.e(TAG, "Media URL or Type is missing in onCreate.")
             Toast.makeText(this, "Error: Media information is missing.", Toast.LENGTH_LONG).show()
             finish()
             return
@@ -137,7 +137,7 @@ class VideoActivity : BaseActivity() {
             setupPopUpMenuActions()
             setupVideoPlayerAndControls()
         } else {
-            Log.e(TAG, "Invalid media type: $mediaType")
+            VihLog.e(TAG, "Invalid media type: $mediaType")
             Toast.makeText(this, "Unsupported media type.", Toast.LENGTH_LONG).show()
             finish()
         }
@@ -182,7 +182,7 @@ class VideoActivity : BaseActivity() {
             )
         } ?: run {
             Toast.makeText(this, "Image URL is missing.", Toast.LENGTH_SHORT).show()
-            Log.e(TAG, "setupImageViewer: mediaUrl is null")
+            VihLog.e(TAG, "setupImageViewer: mediaUrl is null")
             binding.imageViewDisplay.setImageResource(R.drawable.placeholder)
         }
 
@@ -295,7 +295,7 @@ class VideoActivity : BaseActivity() {
 
         val videoUriString = mediaUrl
         if (videoUriString.isNullOrEmpty()) {
-            Log.e(TAG, "Video URI string is null or empty.")
+            VihLog.e(TAG, "Video URI string is null or empty.")
             Toast.makeText(this, "Error: Video link is missing.", Toast.LENGTH_LONG).show()
             finish(); return
         }
@@ -305,19 +305,19 @@ class VideoActivity : BaseActivity() {
             videoUri.path?.let { path ->
                 videoFile = File(path)
                 if (videoFile?.exists() != true) {
-                    Log.e(TAG, "File does not exist at path: $path for URI $videoUriString")
+                    VihLog.e(TAG, "File does not exist at path: $path for URI $videoUriString")
                     Toast.makeText(this, "Error: Video file not found.", Toast.LENGTH_LONG).show()
                     disableShareDownloadPopup() // Video popup
                 } else {
                     enableShareDownloadPopup() // Video popup
                 }
             } ?: run {
-                Log.e(TAG, "Path from file URI is null: $videoUriString")
+                VihLog.e(TAG, "Path from file URI is null: $videoUriString")
                 Toast.makeText(this, "Error: Invalid video file path.", Toast.LENGTH_LONG).show()
                 disableShareDownloadPopup()
             }
         } else {
-            Log.w(TAG, "Video URI is not a local file URI: $videoUriString.")
+            VihLog.w(TAG, "Video URI is not a local file URI: $videoUriString.")
             disableShareDownloadPopup()
         }
 
@@ -349,7 +349,7 @@ class VideoActivity : BaseActivity() {
                 if (!videoControlsVisible) toggleVideoControlsVisibility()
             }
             setOnErrorListener { _, what, extra ->
-                Log.e(TAG, "VideoView Error: What: $what, Extra: $extra for URI: $videoUriString")
+                VihLog.e(TAG, "VideoView Error: What: $what, Extra: $extra for URI: $videoUriString")
                 Toast.makeText(this@VideoActivity, "Cannot play this video.", Toast.LENGTH_SHORT)
                     .show()
                 finish()
@@ -457,7 +457,7 @@ class VideoActivity : BaseActivity() {
         mediaUrl?.let { url ->
             val fileProviderAuthority = "${applicationContext.packageName}.fileprovider"
             shareActualImageFromUrl(this, url, "Share this Image", fileProviderAuthority)
-            Log.i(TAG, "Sharing image from URL: $url")
+            VihLog.i(TAG, "Sharing image from URL: $url")
         } ?: Toast.makeText(this, "Image URL not available.", Toast.LENGTH_SHORT).show()
         if (imageControlsAreVisible) toggleImageControlsVisibility()
     }
@@ -762,7 +762,7 @@ class VideoActivity : BaseActivity() {
                 }
 
             } catch (e: IOException) {
-                Log.e("ShareImage", "Error downloading or sharing image: ${e.message}", e)
+                VihLog.e("ShareImage", "Error downloading or sharing image: ${e.message}", e)
                 (context as? android.app.Activity)?.runOnUiThread {
                     Toast.makeText(
                         context,
@@ -771,7 +771,7 @@ class VideoActivity : BaseActivity() {
                     ).show()
                 }
             } catch (e: Exception) {
-                Log.e("ShareImage", "Generic error sharing image: ${e.message}", e)
+                VihLog.e("ShareImage", "Generic error sharing image: ${e.message}", e)
                 (context as? android.app.Activity)?.runOnUiThread {
                     Toast.makeText(context, "Could not share image.", Toast.LENGTH_SHORT).show()
                 }

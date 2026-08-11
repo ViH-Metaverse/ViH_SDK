@@ -4,7 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.vihmessenger.vihchatbot.listener.onItemChatClickListener
@@ -18,9 +18,9 @@ class FileHandler(private val context: Context) {
     private val FILE_PROVIDER_AUTHORITY = "${context.packageName}.provider"
 
     fun openDocument(file: File) {
-        Log.d(TAG, "FILE_PROVIDER_AUTHORITY: ${FILE_PROVIDER_AUTHORITY}")
+        VihLog.d(TAG, "FILE_PROVIDER_AUTHORITY: ${FILE_PROVIDER_AUTHORITY}")
         if (!file.exists() || file.length() == 0L) {
-            Log.e(TAG, "openDocument: File is invalid or does not exist at ${file.absolutePath}")
+            VihLog.e(TAG, "openDocument: File is invalid or does not exist at ${file.absolutePath}")
             Toast.makeText(context, "File is invalid or empty.", Toast.LENGTH_SHORT).show()
             return
         }
@@ -28,7 +28,7 @@ class FileHandler(private val context: Context) {
         val fileUri: Uri? = try {
             FileProvider.getUriForFile(context, FILE_PROVIDER_AUTHORITY, file)
         } catch (e: IllegalArgumentException) {
-            Log.e(
+            VihLog.e(
                 TAG,
                 "FileProvider Uri error. Check your file_paths.xml and authority string. Path: ${file.absolutePath}",
                 e
@@ -50,10 +50,10 @@ class FileHandler(private val context: Context) {
         }
 
         try {
-            Log.d(TAG, "Attempting to open document with URI: $fileUri, MIME: $mimeType")
+            VihLog.d(TAG, "Attempting to open document with URI: $fileUri, MIME: $mimeType")
             context.startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            Log.e(
+            VihLog.e(
                 TAG,
                 "No application found to open file: ${file.name} with MIME type $mimeType",
                 e
@@ -73,7 +73,7 @@ class FileHandler(private val context: Context) {
 
 //    fun triggerVideoPlayback(videoFile: File, listener: onItemChatClickListener) {
 //        if (!videoFile.exists() || videoFile.length() == 0L) {
-//            Log.e(
+//            VihLog.e(
 //                TAG,
 //                "triggerVideoPlayback: Video file is invalid or empty at ${videoFile.absolutePath}"
 //            )
@@ -84,7 +84,7 @@ class FileHandler(private val context: Context) {
 //        val videoUri: Uri? = try {
 //            FileProvider.getUriForFile(context, FILE_PROVIDER_AUTHORITY, videoFile)
 //        } catch (e: IllegalArgumentException) {
-//            Log.e(
+//            VihLog.e(
 //                TAG,
 //                "FileProvider Uri error for video. Check file_paths.xml. Path: ${videoFile.absolutePath}",
 //                e
@@ -104,10 +104,10 @@ class FileHandler(private val context: Context) {
 //            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 //        }
 //        try {
-//            Log.d(TAG, "Attempting to play video with URI: $videoUri, MIME: $mimeType")
+//            VihLog.d(TAG, "Attempting to play video with URI: $videoUri, MIME: $mimeType")
 //            context.startActivity(intent)
 //        } catch (e: ActivityNotFoundException) {
-//            Log.e(
+//            VihLog.e(
 //                TAG,
 //                "No application found to play video: ${videoFile.name} with MIME type $mimeType",
 //                e

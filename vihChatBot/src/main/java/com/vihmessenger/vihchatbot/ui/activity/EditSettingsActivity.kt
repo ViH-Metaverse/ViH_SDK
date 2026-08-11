@@ -12,7 +12,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -74,7 +74,7 @@ class EditSettingsActivity : BaseActivity() {
             result.data?.data?.let { uri ->
                 selectedImageUri = uri
                 _viewBinder.ivProfileImage.setImageURI(uri)
-                Log.d(TAG, "Gallery image selected: $uri")
+                VihLog.d(TAG, "Gallery image selected: $uri")
             }
         }
     }
@@ -85,7 +85,7 @@ class EditSettingsActivity : BaseActivity() {
     ) { success ->
         if (success) {
             selectedImageUri?.let { uri ->
-                Log.d(TAG, "Camera photo captured successfully: $uri")
+                VihLog.d(TAG, "Camera photo captured successfully: $uri")
                 try {
                     // Load using Glide to handle potential file path issues
                     CustomImageLoader.loadImageView(
@@ -96,22 +96,22 @@ class EditSettingsActivity : BaseActivity() {
                         }
                     )
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error loading camera image: ${e.message}", e)
+                    VihLog.e(TAG, "Error loading camera image: ${e.message}", e)
                     // Fallback method if Glide fails
                     try {
                         _viewBinder.ivProfileImage.setImageURI(null) // Clear the image view
                         _viewBinder.ivProfileImage.setImageURI(uri) // Set the URI again
                     } catch (e2: Exception) {
-                        Log.e(TAG, "Fallback loading failed: ${e2.message}", e2)
+                        VihLog.e(TAG, "Fallback loading failed: ${e2.message}", e2)
                         Toast.makeText(this, "Failed to load image", Toast.LENGTH_SHORT).show()
                     }
                 }
             } ?: run {
-                Log.e(TAG, "Camera returned success but URI is null")
+                VihLog.e(TAG, "Camera returned success but URI is null")
                 Toast.makeText(this, "Failed to get image", Toast.LENGTH_SHORT).show()
             }
         } else {
-            Log.d(TAG, "Camera capture canceled or failed")
+            VihLog.d(TAG, "Camera capture canceled or failed")
         }
     }
 
@@ -255,11 +255,11 @@ class EditSettingsActivity : BaseActivity() {
                 )
                 // Store this URI to use after camera returns
                 selectedImageUri = photoURI
-                Log.d(TAG, "Launching camera with URI: $photoURI")
+                VihLog.d(TAG, "Launching camera with URI: $photoURI")
                 cameraLauncher.launch(photoURI)
             }
         } catch (ex: Exception) {
-            Log.e(TAG, "Camera error: ${ex.message}", ex)
+            VihLog.e(TAG, "Camera error: ${ex.message}", ex)
             Toast.makeText(this, "Failed to open camera: ${ex.message}", Toast.LENGTH_SHORT).show()
         }
     }
@@ -270,10 +270,10 @@ class EditSettingsActivity : BaseActivity() {
             val storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
             return File.createTempFile("JPEG_${timeStamp}_", ".jpg", storageDir).apply {
                 currentPhotoPath = absolutePath
-                Log.d(TAG, "Created temp file at: $absolutePath")
+                VihLog.d(TAG, "Created temp file at: $absolutePath")
             }
         } catch (ex: IOException) {
-            Log.e(TAG, "Error creating image file: ${ex.message}", ex)
+            VihLog.e(TAG, "Error creating image file: ${ex.message}", ex)
             Toast.makeText(this, "Failed to create image file", Toast.LENGTH_SHORT).show()
             return null
         }
@@ -312,16 +312,16 @@ class EditSettingsActivity : BaseActivity() {
         var imagePart: MultipartBody.Part? = null
         selectedImageUri?.let { uri ->
             try {
-                Log.d(TAG, "Processing image from URI: $uri")
+                VihLog.d(TAG, "Processing image from URI: $uri")
                 val inputStream = contentResolver.openInputStream(uri)
                 val file = createTempFileFromInputStream(inputStream)
-                Log.d(TAG, "Created compressed file at: ${file.absolutePath}")
+                VihLog.d(TAG, "Created compressed file at: ${file.absolutePath}")
                 val requestFile = file.asRequestBody("image/*".toMediaTypeOrNull())
                 imagePart =
                     MultipartBody.Part.createFormData("user_profile_image", file.name, requestFile)
-                Log.d(TAG, "Created MultipartBody.Part successfully")
+                VihLog.d(TAG, "Created MultipartBody.Part successfully")
             } catch (e: Exception) {
-                Log.e(TAG, "Error processing image: ${e.message}", e)
+                VihLog.e(TAG, "Error processing image: ${e.message}", e)
                 Toast.makeText(this, "Failed to process image: ${e.message}", Toast.LENGTH_SHORT)
                     .show()
             }

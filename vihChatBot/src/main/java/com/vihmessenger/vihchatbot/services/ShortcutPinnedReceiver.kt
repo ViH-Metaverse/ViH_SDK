@@ -3,21 +3,21 @@ package com.vihmessenger.vihchatbot.services // Or your preferred package for re
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.widget.Toast
 import com.vihmessenger.vihchatbot.constants.AppConstants
 import com.vihmessenger.vihchatbot.utils.sharedPreference.Prefs
 
 class ShortcutPinnedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        Log.d(
+        VihLog.d(
             "ShortcutPinnedReceiver",
             "onReceive CALLED. Action: ${intent.action}, Intent: $intent"
         )
 
         // Even with an explicit intent, checking the action is a good safeguard
         if (intent.action == AppConstants.ACTION_SHORTCUT_PINNED) {
-            Log.i("ShortcutPinnedReceiver", "ACTION_SHORTCUT_PINNED broadcast received!")
+            VihLog.i("ShortcutPinnedReceiver", "ACTION_SHORTCUT_PINNED broadcast received!")
             Toast.makeText(context.applicationContext, "Shortcut Pinned!", Toast.LENGTH_LONG).show()
 
             val prefs = Prefs.getInstance(context.applicationContext)
@@ -25,7 +25,7 @@ class ShortcutPinnedReceiver : BroadcastReceiver() {
             prefs.shortcutAddedSuccessfully = true
             // The following log shows the in-memory value immediately after setting.
             // Actual disk write by apply() is asynchronous.
-            Log.i(
+            VihLog.i(
                 "ShortcutPinnedReceiver",
                 "prefs.shortcutAddedSuccessfully was: $oldValue, set to: ${prefs.shortcutAddedSuccessfully}"
             )
@@ -33,10 +33,10 @@ class ShortcutPinnedReceiver : BroadcastReceiver() {
             prefs.shortcutPromptCount = 0
             prefs.shortcutDeniedCount = 0
             prefs.shortcutDeniedByUser = false
-            Log.d("ShortcutPinnedReceiver", "Shortcut related counters reset.")
+            VihLog.d("ShortcutPinnedReceiver", "Shortcut related counters reset.")
 
         } else {
-            Log.w(
+            VihLog.w(
                 "ShortcutPinnedReceiver",
                 "Received unexpected action or intent: ${intent.action}"
             )

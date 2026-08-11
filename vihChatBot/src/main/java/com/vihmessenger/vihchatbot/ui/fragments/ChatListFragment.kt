@@ -10,7 +10,7 @@ import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.LayerDrawable
 import android.os.Bundle
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -27,6 +27,8 @@ import com.vihmessenger.vihchatbot.ui.bottomsheet.ChatItemBottomSheetFragment
 import com.vihmessenger.vihchatbot.utils.BaseBottomSheetDialog
 import com.vihmessenger.vihchatbot.utils.extensions.parseDateToTimestamp
 import com.vihmessenger.vihchatbot.viewmodel.HomeViewModel
+import com.vihmessenger.vihchatbot.viewmodel.ProfileViewModel
+import android.widget.Toast
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -53,6 +55,7 @@ class ChatListFragment : BaseFragment() {
     private val viewBinder get() = _viewBinder!!
 
     private lateinit var homeViewModel: HomeViewModel
+    private lateinit var profileViewModel: ProfileViewModel
 
     private val chatListAdapter by lazy {
         ChatListAdapter(
@@ -102,6 +105,11 @@ class ChatListFragment : BaseFragment() {
             viewModel = HomeViewModel(activity as BaseActivity),
             className = HomeViewModel::class.java
         )
+        profileViewModel = getViewModel(
+            fragment = activity as BaseActivity,
+            viewModel = ProfileViewModel(activity as BaseActivity),
+            className = ProfileViewModel::class.java
+        )
     }
 
     override fun onViewClick(view: View?) {}
@@ -149,7 +157,7 @@ class ChatListFragment : BaseFragment() {
             }
 
             val isChatListEmpty = chatData.isNullOrEmpty()
-            Log.d(TAG, "ChatListLiveData: category=$category empty=$isChatListEmpty size=${chatData?.size}")
+            VihLog.d(TAG, "ChatListLiveData: category=$category empty=$isChatListEmpty size=${chatData?.size}")
 
             viewBinder.lyBottomNavItem.apply {
                 if (isChatListEmpty) {
@@ -174,6 +182,28 @@ class ChatListFragment : BaseFragment() {
                     lyBottomNavItem.root.visibility = if (available) View.VISIBLE else View.GONE
                 }
             }
+        }
+
+        // Mute/Block chosen in the long-press sheet mutate server-side; re-fetch so the row
+        // reflects the fresh flags (Blocked label / mute icon).
+        profileViewModel.muteResultLiveData.observe(viewLifecycleOwner) { muted ->
+            Toast.makeText(
+                requireContext(),
+                if (muted) "Notifications muted" else "Notifications unmuted",
+                Toast.LENGTH_SHORT
+            ).show()
+            getChatList()
+        }
+        profileViewModel.blacklistResultLiveData.observe(viewLifecycleOwner) { blocked ->
+            Toast.makeText(
+                requireContext(),
+                if (blocked) "Business blocked" else "Business unblocked",
+                Toast.LENGTH_SHORT
+            ).show()
+            getChatList()
+        }
+        profileViewModel.enterpriseMutationError.observe(viewLifecycleOwner) { msg ->
+            Toast.makeText(requireContext(), msg, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -213,7 +243,7 @@ class ChatListFragment : BaseFragment() {
     }
 
     private fun onItemClick(chat: ChatListModel) {
-        Log.e(TAG, "onItemClick: ${chat.enterprise}")
+        VihLog.e(TAG, "onItemClick: ${chat.enterprise}")
         ChatActivity.startIntent(
             requireContext(),
             chat.session_id,
@@ -227,6 +257,16 @@ class ChatListFragment : BaseFragment() {
 
     private fun onItemLongClick(chat: ChatListModel) {
         val bottomSheet = ChatItemBottomSheetFragment.newInstance(chat)
+        bottomSheet.onMuteSelected = { c ->
+            profileViewModel.muteEnterprise(
+                c.enterprise.id, mute = c.enterprise.is_muted_by_user != true
+            )
+        }
+        bottomSheet.onBlockSelected = { c ->
+            profileViewModel.blacklistEnterprise(
+                c.enterprise.id, blacklist = c.enterprise.is_blacklisted_by_user != true
+            )
+        }
         bottomSheet.show(childFragmentManager, BaseBottomSheetDialog.TAG)
     }
 

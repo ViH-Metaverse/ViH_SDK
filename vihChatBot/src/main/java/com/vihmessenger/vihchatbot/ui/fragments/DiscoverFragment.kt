@@ -122,40 +122,51 @@ class DiscoverFragment : BaseFragment() {
                 return@observe
             }
 
-            response?.data?.let { data ->
-                if (currentPage == 1) { // For new search or refresh
-                    if (!::discoverListAdapter.isInitialized) {
-                        setRecyclerView()
-                    }
-                    discoverListAdapter.clearDiscoverList()
+            response?.data?.let { rawData ->
+                // Hide enterprises the channel owner has blacklisted. The backend still
+                // returns them (and rejects sends with 2001), so filter them here before
+                // they ever reach the adapter.
+                val data = rawData.filterNot { it.is_blacklisted_by_channel == true }
+                // Pagination is driven off the RAW list: the backend paginates the
+                // unfiltered set, so "backend has more pages" == rawData was non-empty.
+                // A page that filters down to nothing still means more pages may follow.
+                val backendHasMore = rawData.isNotEmpty()
 
-                    if (data.isEmpty()) {
-                        // Data is empty: "NO RECORDS FOUND" case
-                        isNoResultsState = true
-                        viewBinder.comingSoon.root.visibility = View.VISIBLE
-                        viewBinder.noInternet.root.visibility = View.GONE
-                        viewBinder.llRecylerview.visibility = View.GONE
-                        isLastPage = true
-                    } else {
-                        // Data found
-                        isNoResultsState = false
-                        viewBinder.comingSoon.root.visibility = View.GONE
-                        viewBinder.noInternet.root.visibility = View.GONE
-                        viewBinder.llRecylerview.visibility = View.VISIBLE
-                        discoverListAdapter.addDiscoverList(data)
-                        isLastPage = false
-                    }
-                } else { // For pagination
-                    // If we are paginating, it means initial results were found
+                if (currentPage == 1 && !::discoverListAdapter.isInitialized) {
+                    setRecyclerView()
+                }
+                if (currentPage == 1) {
+                    discoverListAdapter.clearDiscoverList()
+                }
+
+                if (data.isNotEmpty()) {
                     isNoResultsState = false
                     viewBinder.comingSoon.root.visibility = View.GONE
                     viewBinder.noInternet.root.visibility = View.GONE
                     viewBinder.llRecylerview.visibility = View.VISIBLE
-                    if (data.isNotEmpty()) {
-                        discoverListAdapter.addDiscoverList(data)
-                    } else {
-                        isLastPage = true // No more items to paginate
+                    discoverListAdapter.addDiscoverList(data)
+                }
+
+                when {
+                    !backendHasMore -> {
+                        // Backend has no more pages. If nothing survived the blacklist
+                        // filter across every page, show the neutral empty state.
+                        isLastPage = true
+                        if (discoverListAdapter.itemCount == 0) {
+                            isNoResultsState = true
+                            viewBinder.comingSoon.root.visibility = View.VISIBLE
+                            viewBinder.noInternet.root.visibility = View.GONE
+                            viewBinder.llRecylerview.visibility = View.GONE
+                        }
                     }
+                    data.isEmpty() -> {
+                        // This whole page was channel-blacklisted but more pages may hold
+                        // visible results. Advance automatically — an empty list can't be
+                        // scrolled to trigger the normal pagination listener.
+                        isLastPage = false
+                        getDiscoverList(++currentPage, currentSearchQuery, currentFilterStr)
+                    }
+                    else -> isLastPage = false
                 }
             } ?: run { // Response or response.data is null
                 if (currentPage == 1) {

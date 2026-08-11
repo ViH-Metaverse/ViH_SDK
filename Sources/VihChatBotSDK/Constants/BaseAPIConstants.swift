@@ -21,6 +21,12 @@ public enum BaseAPIConstants {
     public static let subscribeChannel = "account/subscribe-channel/"
     public static let userLogout = "account/logout/"
 
+    // Per-enterprise state mutations (read side is the four flags on EnterPriseModel).
+    public static let userBlacklistEnterprise = "developer/user-blacklist-enterprise/"
+    public static let muteEnterprise = "main/mute-enterprise-user-channel/"
+    // promotional_opt_in is the INVERSE of the read flag is_promotional_message_blocked.
+    public static let userChannelEnterpriseConfig = "main/user-channel-enterprise-configuration/"
+
     // Phone verification (silent network auth + SMS OTP fallback). See
     // docs/ios/phone-auth-backend-contract.md.
     public static let authStart = "auth/start/"
@@ -30,8 +36,4 @@ public enum BaseAPIConstants {
 
     /// Session-registry endpoint (architecture §3.3) mapping deviceId -> push token.
     public static let registerDeviceToken = "main/sdk-device-token/"
-
-    /// Loan-approval (Ultravox voicebot) lives on a separate host.
-    public static let loanApprovalURL = URL(string: "https://developer-portal.vihresearchlabs.ai/main/loan-approval/")!
-    public static let callDetailsURL = URL(string: "https://developer-portal.vihresearchlabs.ai/main/call-details/")!
 }

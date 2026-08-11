@@ -7,7 +7,7 @@ import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
 import android.os.Environment
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.widget.ImageView
 import android.widget.Toast
@@ -252,7 +252,7 @@ class TemplateMessageViewHolder(
             }
 
             ivCancelDownload.setOnClickListener {
-                Log.d(
+                VihLog.d(
                     TAG,
                     "[DOC: $localDocFileNameForLogging] ivCancelDownload clicked. Job: $currentDownloadJob"
                 )
@@ -278,7 +278,7 @@ class TemplateMessageViewHolder(
                     if (isActive) binding.circularProgressBar.progress = progress.toFloat()
                 },
                 onComplete = { success, file, isCancelled ->
-                    Log.i(
+                    VihLog.i(
                         TAG,
                         "[DOC: $localFileNameForLogging] onComplete. Cancelled: $isCancelled, Success: $success"
                     )
@@ -302,7 +302,7 @@ class TemplateMessageViewHolder(
         }
         currentDownloadJob?.invokeOnCompletion { throwable ->
             if (throwable is kotlinx.coroutines.CancellationException) {
-                Log.d(
+                VihLog.d(
                     TAG,
                     "[DOC: $localFileNameForLogging] Doc Job Cancelled: ${throwable.message}"
                 )
@@ -312,7 +312,7 @@ class TemplateMessageViewHolder(
 
     fun cleanupDocumentDownload() {
         val docName = binding.tvFileName.tag?.toString() ?: "UnknownDoc"
-        Log.d(TAG, "cleanupDocumentDownload called for $docName. Job: $currentDownloadJob")
+        VihLog.d(TAG, "cleanupDocumentDownload called for $docName. Job: $currentDownloadJob")
         currentDownloadJob?.cancel("ViewHolder document download cleanup.")
         currentDownloadJob = null
         if (binding.root.isAttachedToWindow) {
@@ -388,7 +388,7 @@ class TemplateMessageViewHolder(
                             if (isActive) videoCircularProgressBar.progress = progress.toFloat()
                         },
                         onComplete = { success, file, isCancelled ->
-                            Log.i(
+                            VihLog.i(
                                 TAG,
                                 "[VID: $videoFileNameForLogging] onComplete. Cancelled: $isCancelled, Success: $success"
                             )
@@ -417,7 +417,7 @@ class TemplateMessageViewHolder(
                 }
                 currentVideoDownloadJob?.invokeOnCompletion { throwable ->
                     if (throwable is kotlinx.coroutines.CancellationException) {
-                        Log.d(
+                        VihLog.d(
                             TAG,
                             "[VID: $videoFileNameForLogging] Video Job Cancelled: ${throwable.message}"
                         )
@@ -426,7 +426,7 @@ class TemplateMessageViewHolder(
             }
 
             ivCancelVideoDownload.setOnClickListener {
-                Log.d(
+                VihLog.d(
                     TAG,
                     "[VID: $videoFileNameForLogging] ivCancelVideoDownload clicked. Job: $currentVideoDownloadJob"
                 )
@@ -453,7 +453,7 @@ class TemplateMessageViewHolder(
     fun cleanupVideoDownload() {
         val videoName =
             binding.rlVideoLayout.getTag(R.id.tag_video_filename)?.toString() ?: "UnknownVideo"
-        Log.d(TAG, "cleanupVideoDownload called for $videoName. Job: $currentVideoDownloadJob")
+        VihLog.d(TAG, "cleanupVideoDownload called for $videoName. Job: $currentVideoDownloadJob")
         currentVideoDownloadJob?.cancel("ViewHolder video download cleanup.")
         currentVideoDownloadJob = null
         if (binding.root.isAttachedToWindow) {
@@ -476,7 +476,7 @@ class TemplateMessageViewHolder(
             channelSpecificDir.mkdirs() // Ensures the directory exists
 
             if (baseDir == null) {
-                Log.e(TAG, "External music directory is null. Cannot proceed with audio setup.")
+                VihLog.e(TAG, "External music directory is null. Cannot proceed with audio setup.")
                 Toast.makeText(context, "Cannot access storage for audio", Toast.LENGTH_SHORT)
                     .show()
                 audioDownloadTemplate.visibility = View.GONE
@@ -519,11 +519,11 @@ class TemplateMessageViewHolder(
                 audioDownloadTemplate.visibility = View.GONE
                 clAudioPlayTemplate.visibility = View.VISIBLE
                 try {
-                    Log.d(TAG, "Setting samples from: ${localAudioFile.absolutePath}")
+                    VihLog.d(TAG, "Setting samples from: ${localAudioFile.absolutePath}")
                     applyWaveformSamples(waveformSeekBar, localAudioFile)
                     waveformSeekBar.waveProgressColor = DynamicThemeManager.getPrimaryColor()
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error setting samples for WaveformSeekBar", e)
+                    VihLog.e(TAG, "Error setting samples for WaveformSeekBar", e)
                 }
                 audioPlayerManager.initialize(
                     localAudioFile.absolutePath, waveformSeekBar, ivPlay, tvDuration,
@@ -544,7 +544,7 @@ class TemplateMessageViewHolder(
 
             ivCancelAudioDownload.setOnClickListener {
                 val audioFileNameForLogging = FileUtils.getFileNameFromUrl(audioUrl)
-                Log.d(
+                VihLog.d(
                     TAG,
                     "[AUD: $audioFileNameForLogging] ivCancelAudioDownload clicked. Job: $currentAudioDownloadJob"
                 )
@@ -565,14 +565,14 @@ class TemplateMessageViewHolder(
             val samples = try {
                 Amplituda(context).processAudio(file).get().amplitudesAsList().toIntArray()
             } catch (e: Exception) {
-                Log.e(TAG, "Amplituda decode failed for ${file.name}", e)
+                VihLog.e(TAG, "Amplituda decode failed for ${file.name}", e)
                 intArrayOf()
             }
             withContext(Dispatchers.Main) {
                 try {
                     seekBar.setSampleFrom(samples)
                 } catch (e: Exception) {
-                    Log.e(TAG, "Failed to apply waveform samples", e)
+                    VihLog.e(TAG, "Failed to apply waveform samples", e)
                 }
             }
         }
@@ -597,7 +597,7 @@ class TemplateMessageViewHolder(
                         progress.toFloat()
                 },
                 onComplete = { success, file, isCancelled ->
-                    Log.i(
+                    VihLog.i(
                         TAG,
                         "[AUD: $localFileNameForLogging] onComplete. Cancelled: $isCancelled, Success: $success"
                     )
@@ -613,12 +613,12 @@ class TemplateMessageViewHolder(
                         binding.lyAudioTemplate.audioDownloadTemplate.visibility = View.GONE
                         binding.lyAudioTemplate.clAudioPlayTemplate.visibility = View.VISIBLE
                         try {
-                            Log.d(TAG, "Setting samples from: ${file.absolutePath}")
+                            VihLog.d(TAG, "Setting samples from: ${file.absolutePath}")
                             applyWaveformSamples(binding.lyAudioTemplate.waveformSeekBar, file)
                             binding.lyAudioTemplate.waveformSeekBar.waveProgressColor =
                                 DynamicThemeManager.getPrimaryColor()
                         } catch (e: Exception) {
-                            Log.e(
+                            VihLog.e(
                                 TAG,
                                 "Error setting samples for WaveformSeekBar after download",
                                 e
@@ -643,7 +643,7 @@ class TemplateMessageViewHolder(
         }
         currentAudioDownloadJob?.invokeOnCompletion { throwable ->
             if (throwable is kotlinx.coroutines.CancellationException) {
-                Log.d(
+                VihLog.d(
                     TAG,
                     "[AUD: $localFileNameForLogging] Audio Job Cancelled: ${throwable.message}"
                 )
@@ -653,7 +653,7 @@ class TemplateMessageViewHolder(
 
     fun cleanupAudioDownload() {
         val audioName = binding.lyAudioTemplate.tvAudioFileName.tag?.toString() ?: "UnknownAudio"
-        Log.d(TAG, "cleanupAudioDownload called for $audioName. Job: $currentAudioDownloadJob")
+        VihLog.d(TAG, "cleanupAudioDownload called for $audioName. Job: $currentAudioDownloadJob")
         currentAudioDownloadJob?.cancel("ViewHolder audio download cleanup.")
         currentAudioDownloadJob = null
         if (binding.root.isAttachedToWindow) {
@@ -685,7 +685,7 @@ class TemplateMessageViewHolder(
     }
 
     fun cleanup() {
-        Log.d(TAG, "cleanup() called for ViewHolder: $this")
+        VihLog.d(TAG, "cleanup() called for ViewHolder: $this")
 //        audioPlayerManager.cleanup()
 //        cleanupDocumentDownload()
 //        cleanupVideoDownload()
@@ -693,13 +693,13 @@ class TemplateMessageViewHolder(
     }
 
     fun onViewAttached() {
-        Log.d(TAG, "onViewAttached() for ViewHolder: $this")
+        VihLog.d(TAG, "onViewAttached() for ViewHolder: $this")
         DynamicThemeManager.registerListener(this)
         applyThemeColors(DynamicThemeManager.getPrimaryColor())
     }
 
     fun onViewDetached() {
-        Log.d(TAG, "onViewDetached() for ViewHolder: $this, Cancelling jobs.")
+        VihLog.d(TAG, "onViewDetached() for ViewHolder: $this, Cancelling jobs.")
         DynamicThemeManager.unregisterListener(this)
     }
 }

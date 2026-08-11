@@ -8,7 +8,7 @@ import android.graphics.drawable.ShapeDrawable
 import android.graphics.drawable.StateListDrawable
 import android.graphics.drawable.shapes.RectShape
 import android.util.AttributeSet
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.Gravity
 import android.widget.LinearLayout
 import android.widget.RadioGroup
@@ -49,7 +49,7 @@ class ViewPagerIndicator2(context: Context, attrs: AttributeSet?) :
                 d.addState(intArrayOf(android.R.attr.state_checked), selectedDrawable)
                 d.addState(intArrayOf(), unselectedDrawable)
             } catch (e: Exception) {
-                Log.e(TAG, getMessageFor(e))
+                VihLog.e(TAG, getMessageFor(e))
             }
             return d
         }
@@ -73,7 +73,7 @@ class ViewPagerIndicator2(context: Context, attrs: AttributeSet?) :
                 addViews()
             }
         } catch (e: Exception) {
-            Log.e(TAG, getMessageFor(e))
+            VihLog.e(TAG, getMessageFor(e))
         }
     }
 
@@ -105,7 +105,7 @@ class ViewPagerIndicator2(context: Context, attrs: AttributeSet?) :
             }
             check(firstItem.id)
         } catch (e: Exception) {
-            Log.e(TAG, getMessageFor(e))
+            VihLog.e(TAG, getMessageFor(e))
         }
     }
 
@@ -114,7 +114,7 @@ class ViewPagerIndicator2(context: Context, attrs: AttributeSet?) :
             try {
                 this@ViewPagerIndicator2.check(getChildAt(position).id)
             } catch (e: Exception) {
-                Log.e(TAG, getMessageFor(e))
+                VihLog.e(TAG, getMessageFor(e))
             }
         }
 
@@ -201,7 +201,7 @@ class ViewPagerIndicator2(context: Context, attrs: AttributeSet?) :
 
             a.recycle()
         } catch (e: Exception) {
-            Log.e(TAG, getMessageFor(e))
+            VihLog.e(TAG, getMessageFor(e))
         }
     }
 

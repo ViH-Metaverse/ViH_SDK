@@ -46,7 +46,7 @@ object FileUtils {
 
 
     fun getMimeTypeForSharing(fileExtension: String): String {
-         return when (fileExtension.toLowerCase()) {
+         return when (fileExtension.lowercase()) {
             "mp3" -> "audio/mpeg"
             "wav" -> "audio/wav"
             "aac" -> "audio/aac"

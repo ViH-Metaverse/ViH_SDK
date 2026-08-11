@@ -20,7 +20,7 @@ import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -167,7 +167,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
             if (task.isSuccessful) {
                 fcmToken = task.result
             } else {
-                Log.w(TAG, "Fetching FCM registration token failed", task.exception)
+                VihLog.w(TAG, "Fetching FCM registration token failed", task.exception)
             }
             // Refresh the user session independently of getSdkFeatures. Previously this
             // was gated behind a successful SDK-features response, so a failing (e.g.
@@ -284,7 +284,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                     selectInitialTab() // config default tab (dynamic) or the chat list (static)
                     isInitialFragmentLoaded = true
                 } else {
-                    Log.d(TAG, "UserProfile updated, but initial fragment was already loaded.")
+                    VihLog.d(TAG, "UserProfile updated, but initial fragment was already loaded.")
                 }
             }
         }
@@ -328,7 +328,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
             } else {
                 setupStaticTabs(binding)
             }
-        } ?: Log.e(TAG, "setupBottomNavigation: Binding is null")
+        } ?: VihLog.e(TAG, "setupBottomNavigation: Binding is null")
     }
 
     /** Legacy path: the three tabs baked into @menu/nav_menu.xml. Unchanged behavior. */
@@ -353,7 +353,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
      */
     private fun setupDynamicTabs(binding: FragmentDashboardBinding, tabs: List<VihTab>) {
         val shown = if (tabs.size > 5) {
-            Log.w(TAG, "setupDynamicTabs: ${tabs.size} tabs configured; BottomNav caps at 5, dropping extras.")
+            VihLog.w(TAG, "setupDynamicTabs: ${tabs.size} tabs configured; BottomNav caps at 5, dropping extras.")
             tabs.take(5)
         } else tabs
 
@@ -462,7 +462,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
 
     private fun setCustomStatusBar() {
         if (!isAdded || activity == null) {
-            Log.w(TAG, "setCustomStatusBar: Fragment not added or activity is null.")
+            VihLog.w(TAG, "setCustomStatusBar: Fragment not added or activity is null.")
             return
         }
 
@@ -733,7 +733,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
 
     override fun applyTheme(primaryColor: Int) {
         super.applyTheme(primaryColor)
-        Log.e(TAG, "applyTheme: ${primaryColor}")
+        VihLog.e(TAG, "applyTheme: ${primaryColor}")
     }
 
     override fun onThemeChanged(
@@ -817,7 +817,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                     }
                     backgroundDrawable.setStroke(strokeWidthInPx, primaryColor)
                 } else {
-                    Log.w(
+                    VihLog.w(
                         TAG,
                         "btnClearFilters background is not a GradientDrawable, cannot set stroke color dynamically."
                     )
@@ -864,33 +864,33 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
 
     private fun checkAndPromptForShortcut(chatBoatLogoUrl: String, chatBotName: String) {
         val isShortcutAdded = prefs.shortcutAddedSuccessfully
-        Log.i(
+        VihLog.i(
             TAG,
             "checkAndPromptForShortcut: Current value of prefs.shortcutAddedSuccessfully at method start IS: $isShortcutAdded"
         )
 
         if (isShortcutAdded) {
-            Log.i(TAG, "Shortcut ALREADY ADDED (according to prefs). No prompt needed.")
+            VihLog.i(TAG, "Shortcut ALREADY ADDED (according to prefs). No prompt needed.")
             return
         }
 
-        Log.d(
+        VihLog.d(
             TAG,
             "Shortcut NOT YET ADDED (according to prefs). Proceeding with prompt/denial logic."
         )
 
         val shouldPromptNow = if (prefs.shortcutDeniedByUser) {
             prefs.shortcutDeniedCount += 1
-            Log.d(
+            VihLog.d(
                 TAG,
                 "Shortcut was denied by user. Denied count incremented to: ${prefs.shortcutDeniedCount}"
             )
             if (prefs.shortcutDeniedCount >= 10) {
-                Log.i(TAG, "Denied 10 times. Will attempt to prompt for shortcut again.")
+                VihLog.i(TAG, "Denied 10 times. Will attempt to prompt for shortcut again.")
                 prefs.shortcutDeniedCount = 0 // Reset counter for next cycle of denials
                 true
             } else {
-                Log.d(
+                VihLog.d(
                     TAG,
                     "Shortcut denied previously. Count: ${prefs.shortcutDeniedCount}/10. Not prompting yet."
                 )
@@ -899,23 +899,23 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
         } else {
             val firstEver = prefs.shortcutPromptCount == 0
             prefs.shortcutPromptCount += 1
-            Log.d(
+            VihLog.d(
                 TAG,
                 "Shortcut not denied by user. Prompt count incremented to: ${prefs.shortcutPromptCount}"
             )
             when {
                 firstEver -> {
                     // Offer immediately on first login (fresh session → count starts at 0).
-                    Log.i(TAG, "First login: prompting for the home-screen shortcut immediately.")
+                    VihLog.i(TAG, "First login: prompting for the home-screen shortcut immediately.")
                     true
                 }
                 prefs.shortcutPromptCount >= 5 -> {
-                    Log.i(TAG, "Prompt count reached. Will attempt to prompt for shortcut again.")
+                    VihLog.i(TAG, "Prompt count reached. Will attempt to prompt for shortcut again.")
                     prefs.shortcutPromptCount = 0 // Reset counter for next cycle of reminders
                     true
                 }
                 else -> {
-                    Log.d(
+                    VihLog.d(
                         TAG,
                         "Shortcut prompt count: ${prefs.shortcutPromptCount}/5. Not prompting yet."
                     )
@@ -926,27 +926,27 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
 
         if (shouldPromptNow) {
             if (!isAdded || activity == null) {
-                Log.w(
+                VihLog.w(
                     TAG,
                     "Cannot proceed with shortcut prompt: Fragment not added or activity is null."
                 )
                 return
             }
-            Log.d(TAG, "Proceeding to load image for shortcut dialog. URL: $chatBoatLogoUrl")
+            VihLog.d(TAG, "Proceeding to load image for shortcut dialog. URL: $chatBoatLogoUrl")
             viewLifecycleOwner.lifecycleScope.launch { // Launches on Main dispatcher by default
                 val shortcutBitmap: Bitmap? = if (chatBoatLogoUrl.isNotBlank()) {
                     withContext(Dispatchers.IO) { // Switch to IO for network call
-                        Log.d(TAG, "Loading image from URL: $chatBoatLogoUrl")
+                        VihLog.d(TAG, "Loading image from URL: $chatBoatLogoUrl")
                         loadImageFromUrl(chatBoatLogoUrl, 0)
                     }
                 } else {
-                    Log.w(TAG, "chatBoatLogoUrl is blank. No custom icon to load.")
+                    VihLog.w(TAG, "chatBoatLogoUrl is blank. No custom icon to load.")
                     null
                 }
 
                 // Back on Main thread here
                 if (!isAdded || activity == null) { // Re-check fragment state
-                    Log.w(
+                    VihLog.w(
                         TAG,
                         "Fragment became detached or activity became null while loading image. Aborting dialog."
                     )
@@ -954,9 +954,9 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                 }
 
                 if (shortcutBitmap != null) {
-                    Log.d(TAG, "Successfully loaded bitmap for shortcut icon.")
+                    VihLog.d(TAG, "Successfully loaded bitmap for shortcut icon.")
                 } else {
-                    Log.w(
+                    VihLog.w(
                         TAG,
                         "Failed to load bitmap or URL was blank. Dialog will use default icon logic."
                     )
@@ -977,7 +977,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
         chatBotName: String
     ) { // Added originalUrl for logging if needed
         if (!isAdded || activity == null) {
-            Log.w(
+            VihLog.w(
                 TAG,
                 "showAddShortcutDialog: Fragment not added or activity is null. Cannot show dialog."
             )
@@ -1015,7 +1015,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
         chatBotName: String
     ) {
         if (!isAdded || activity == null) {
-            Log.w(TAG, "createHomeScreenShortcut: Fragment not added or activity is null.")
+            VihLog.w(TAG, "createHomeScreenShortcut: Fragment not added or activity is null.")
             return
         }
         val context = requireContext()
@@ -1024,7 +1024,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
         val currentHashCode = arguments?.getString(AppConstants.HASHCODE_EXTRA)
 
         if (currentPhoneNumber == null || currentHashCode == null) {
-            Log.e(
+            VihLog.e(
                 TAG,
                 "Cannot create shortcut: Essential data (phone/hashcode) missing from fragment arguments."
             )
@@ -1059,10 +1059,10 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
 
             viewLifecycleOwner.lifecycleScope.launch(Dispatchers.Main) {
                 val iconToUse: IconCompat = if (shortcutBitmap != null) {
-                    Log.d(TAG, "Using provided Bitmap for shortcut icon.")
+                    VihLog.d(TAG, "Using provided Bitmap for shortcut icon.")
                     IconCompat.createWithBitmap(shortcutBitmap)
                 } else {
-                    Log.w(
+                    VihLog.w(
                         TAG,
                         "Provided Bitmap was null (URL was '$chatBoatLogoUrlForLogging' or failed to load). Using default app icon."
                     )
@@ -1097,12 +1097,12 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                         successCallback.intentSender
                     )
                     if (pinRequestSent) {
-                        Log.i(
+                        VihLog.i(
                             TAG,
                             "ShortcutManagerCompat.requestPinShortcut call SUCCEEDED. Waiting for broadcast to confirm addition."
                         )
                     } else {
-                        Log.e(
+                        VihLog.e(
                             TAG,
                             "ShortcutManagerCompat.requestPinShortcut call FAILED. Launcher might not support or user denied at system level."
                         )
@@ -1113,19 +1113,19 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                         ).show()
                     }
                 } catch (e: SecurityException) {
-                    Log.e(TAG, "SecurityException requesting shortcut: ${e.message}", e)
+                    VihLog.e(TAG, "SecurityException requesting shortcut: ${e.message}", e)
                     Toast.makeText(
                         context,
                         "Could not create shortcut due to security restrictions.",
                         Toast.LENGTH_LONG
                     ).show()
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error requesting shortcut: ${e.message}", e)
+                    VihLog.e(TAG, "Error requesting shortcut: ${e.message}", e)
                     Toast.makeText(context, "Error creating shortcut.", Toast.LENGTH_LONG).show()
                 }
             }
         } else {
-            Log.w(TAG, "Cannot create shortcut: Pinning not supported by launcher.")
+            VihLog.w(TAG, "Cannot create shortcut: Pinning not supported by launcher.")
             Toast.makeText(
                 context,
                 "Unable to create shortcut on this launcher.",
@@ -1138,7 +1138,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
     // Updated helper function to load Bitmap from URL with redirect handling
     private suspend fun loadImageFromUrl(imageUrl: String, redirectCount: Int): Bitmap? {
         if (redirectCount > MAX_REDIRECTS) {
-            Log.e(
+            VihLog.e(
                 TAG,
                 "loadImageFromUrl: Exceeded maximum redirect limit ($MAX_REDIRECTS) for URL: $imageUrl"
             )
@@ -1146,7 +1146,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
         }
 
         if (imageUrl.isBlank() || !android.util.Patterns.WEB_URL.matcher(imageUrl).matches()) {
-            Log.e(TAG, "Invalid URL for image: $imageUrl")
+            VihLog.e(TAG, "Invalid URL for image: $imageUrl")
             return null
         }
 
@@ -1155,7 +1155,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
         var bitmap: Bitmap? = null
         var connection: HttpURLConnection? = null
         try {
-            Log.d(
+            VihLog.d(
                 TAG,
                 "loadImageFromUrl (Attempt ${redirectCount + 1}): Starting download from $imageUrl"
             )
@@ -1168,7 +1168,7 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
             connection.connect()
 
             val responseCode = connection.responseCode
-            Log.d(TAG, "loadImageFromUrl: Response code $responseCode for $imageUrl")
+            VihLog.d(TAG, "loadImageFromUrl: Response code $responseCode for $imageUrl")
 
             when (responseCode) {
                 HttpURLConnection.HTTP_OK -> {
@@ -1177,21 +1177,21 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                     // val options = BitmapFactory.Options().apply { inSampleSize = 2 } // Example
                     bitmap = BitmapFactory.decodeStream(inputStream)
                     inputStream.close()
-                    Log.d(TAG, "loadImageFromUrl: Bitmap decoded successfully from $imageUrl")
+                    VihLog.d(TAG, "loadImageFromUrl: Bitmap decoded successfully from $imageUrl")
                 }
 
                 HttpURLConnection.HTTP_MOVED_PERM, HttpURLConnection.HTTP_MOVED_TEMP, HttpURLConnection.HTTP_SEE_OTHER -> {
                     val newUrl = connection.getHeaderField("Location")
                     connection.disconnect() // Disconnect current connection before recursing
                     if (newUrl != null) {
-                        Log.d(TAG, "loadImageFromUrl: Redirected to $newUrl from $imageUrl")
+                        VihLog.d(TAG, "loadImageFromUrl: Redirected to $newUrl from $imageUrl")
                         // Recursively call loadImageFromUrl with the new URL and incremented redirect count
                         return loadImageFromUrl(
                             newUrl,
                             redirectCount + 1
                         ) // Return the result of recursive call
                     } else {
-                        Log.e(
+                        VihLog.e(
                             TAG,
                             "loadImageFromUrl: Redirect response but no Location header for $imageUrl"
                         )
@@ -1199,14 +1199,14 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                 }
 
                 else -> {
-                    Log.e(
+                    VihLog.e(
                         TAG,
                         "loadImageFromUrl: Server responded with code $responseCode for $imageUrl"
                     )
                 }
             }
         } catch (e: Exception) {
-            Log.e(
+            VihLog.e(
                 TAG,
                 "loadImageFromUrl: Error downloading image from $imageUrl - ${e.message}",
                 e

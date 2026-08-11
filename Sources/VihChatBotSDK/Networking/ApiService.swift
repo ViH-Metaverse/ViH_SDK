@@ -61,9 +61,10 @@ public protocol ApiService {
 
     func registerDeviceToken(body: DeviceTokenRequest) async throws -> DeviceTokenResponse
 
-    func postLoanApproval(url: URL, body: LoanApprovalRequest) async throws -> LoanApprovalResponse
-
-    func postCallDetails(url: URL, body: CallDetailsRequest) async throws -> [String: Any]
+    // Per-enterprise state mutations (see EnterPriseModel flags).
+    func blacklistEnterprise(enterprisePk: Int, blacklist: Bool) async throws -> GenericStatusResponse
+    func muteEnterprise(enterpriseId: Int, muteStatus: Bool) async throws -> GenericStatusResponse
+    func updateEnterprisePromotional(optIn: Bool, enterpriseId: Int, channelId: String) async throws -> GenericStatusResponse
 }
 
 final class APIServiceImpl: ApiService {
@@ -264,28 +265,49 @@ final class APIServiceImpl: ApiService {
         return try await client.send(req, as: DeviceTokenResponse.self)
     }
 
-    func postLoanApproval(url: URL, body: LoanApprovalRequest) async throws -> LoanApprovalResponse {
-        let req = client.request(
-            path: "",
-            method: "POST",
-            body: try JSONEncoder().encode(body),
-            contentType: "application/json",
-            explicitURL: url
-        )
-        return try await client.send(req, as: LoanApprovalResponse.self)
+    // MARK: - Per-enterprise state mutations
+
+    /// Form-url-encode a flat param map (mirrors Retrofit @FormUrlEncoded @Field). Booleans
+    /// are sent as "true"/"false" to match Retrofit's Boolean serialization.
+    private func formEncoded(_ params: [String: String]) -> Data? {
+        params.map { key, value in
+            let k = key.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? key
+            let v = value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
+            return "\(k)=\(v)"
+        }.joined(separator: "&").data(using: .utf8)
     }
 
-    func postCallDetails(url: URL, body: CallDetailsRequest) async throws -> [String: Any] {
+    func blacklistEnterprise(enterprisePk: Int, blacklist: Bool) async throws -> GenericStatusResponse {
         let req = client.request(
-            path: "",
+            path: BaseAPIConstants.userBlacklistEnterprise,
             method: "POST",
-            body: try JSONEncoder().encode(body),
-            contentType: "application/json",
-            explicitURL: url
+            body: formEncoded(["enterprise_pk": String(enterprisePk), "blacklist": blacklist ? "true" : "false"]),
+            contentType: "application/x-www-form-urlencoded"
         )
-        let (data, response) = try await client.session.data(for: req)
-        guard let http = response as? HTTPURLResponse else { throw APIError("Invalid response object") }
-        try APIClient.throwForHTTP(http, data: data)
-        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        return try await client.send(req, as: GenericStatusResponse.self)
+    }
+
+    func muteEnterprise(enterpriseId: Int, muteStatus: Bool) async throws -> GenericStatusResponse {
+        let req = client.request(
+            path: BaseAPIConstants.muteEnterprise,
+            method: "POST",
+            body: formEncoded(["enterprise_id": String(enterpriseId), "mute_status": muteStatus ? "true" : "false"]),
+            contentType: "application/x-www-form-urlencoded"
+        )
+        return try await client.send(req, as: GenericStatusResponse.self)
+    }
+
+    func updateEnterprisePromotional(optIn: Bool, enterpriseId: Int, channelId: String) async throws -> GenericStatusResponse {
+        let req = client.request(
+            path: BaseAPIConstants.userChannelEnterpriseConfig,
+            method: "POST",
+            body: formEncoded([
+                "promotional_opt_in": optIn ? "true" : "false",
+                "enterprise_id": String(enterpriseId),
+                "channel_id": channelId
+            ]),
+            contentType: "application/x-www-form-urlencoded"
+        )
+        return try await client.send(req, as: GenericStatusResponse.self)
     }
 }

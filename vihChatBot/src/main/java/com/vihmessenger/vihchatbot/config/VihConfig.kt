@@ -11,6 +11,64 @@ package com.vihmessenger.vihchatbot.config
 data class VihConfig(
     val theme: VihTheme? = null,
     val navigation: VihNavigation? = null,
+    val diagnostics: VihDiagnostics = VihDiagnostics(),
+    val security: VihSecurity = VihSecurity(),
+)
+
+/**
+ * Platform hardening the SDK applies to its own screens (VAPT F-09).
+ *
+ * Defaults are the secure ones. They are configurable because a partner may have a
+ * legitimate reason to relax them — but relaxing has to be a deliberate, auditable choice
+ * in the host app's code rather than the SDK's silent default.
+ */
+data class VihSecurity(
+    /**
+     * Sets `FLAG_SECURE` on SDK windows, which blocks screenshots, screen recording and
+     * non-secure display mirroring, and excludes the screen from the recents thumbnail.
+     *
+     * On by default: this SDK renders OTPs and transactional messages, and screen-capture
+     * malware plus accessibility-abuse trojans are the dominant OTP-theft technique on
+     * Android. Set false only if a partner explicitly accepts that risk (e.g. they need
+     * users to screenshot promotional content).
+     */
+    val blockScreenCapture: Boolean = true,
+
+    /**
+     * Permit the voice-bot call to run over a cleartext `ws://` socket (VAPT F-04).
+     *
+     * The voice-bot transport currently has no TLS terminator and no authentication: the
+     * `bot_key` and the entire PCM conversation, both directions, traverse the network
+     * unencrypted. Anyone on the path — hostile Wi-Fi, ISP, compromised router — can record
+     * the call verbatim and harvest the key, and can impersonate the bot to the user.
+     *
+     * Off by default, so the SDK fails closed rather than silently transmitting plaintext
+     * voice. A partner who accepts that risk must say so explicitly in their own code,
+     * which makes the decision auditable. `wss://` URLs are always allowed and are
+     * unaffected by this flag.
+     *
+     * Remove this switch once the voice-bot is served over `wss://`.
+     */
+    val allowInsecureVoiceTransport: Boolean = false,
+)
+
+/**
+ * Controls what leaves the device for diagnostics (VAPT F-14).
+ *
+ * The SDK ships with a Bugfender integration. Bugfender is a *remote* log sink: explicit
+ * `Bugfender.d/i/w/e` calls upload to a third-party processor regardless of build type —
+ * the boolean passed to `Bugfender.init` only controls logcat mirroring, not upload. In an
+ * SDK embedded in someone else's app that is a data flow the host app's operator must
+ * consent to, not one the SDK may assume, so it now defaults to **off**.
+ *
+ * Host apps that want it must opt in explicitly and are responsible for disclosing the
+ * processor in their own privacy notice and DPA.
+ */
+data class VihDiagnostics(
+    /** Upload SDK diagnostic logs to Bugfender. Off by default; requires a configured key. */
+    val remoteLoggingEnabled: Boolean = false,
+    /** Upload crash reports to Bugfender. Off by default; requires a configured key. */
+    val crashReportingEnabled: Boolean = false,
 )
 
 /**
@@ -84,6 +142,9 @@ object VihConfigStore {
 
     fun set(newConfig: VihConfig?) {
         config = newConfig
+        // Diagnostics opt-in only becomes knowable once the host supplies a config, so this
+        // is the correct moment to honour it (VAPT F-14).
+        com.vihmessenger.vihchatbot.AppController.applyDiagnosticsConfig()
     }
 
     val navigation: VihNavigation? get() = config?.navigation

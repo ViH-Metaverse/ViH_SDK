@@ -45,8 +45,22 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate, URLSession
         let host = challenge.protectionSpace.host
         let configuredPins = VihChatBotSDK.shared.config?.certificatePins[host] ?? []
 
-        // No pins configured for this host — defer to system trust.
         if configuredPins.isEmpty {
+            // SECURITY (VAPT F-03): pinning silently fell through to system trust whenever
+            // the pin map was empty — and it defaulted to empty, so pinning was effectively
+            // off in every build. It now defaults to `VihSDKConfig.defaultCertificatePins`,
+            // and an unpinned *API* host is treated as a misconfiguration rather than an
+            // acceptable fallback: trap in debug so it is caught before shipping, and log
+            // loudly in release rather than failing a partner's traffic outright.
+            //
+            // Non-API hosts (image CDNs, enterprise websites) legitimately have no pins and
+            // fall through to normal platform validation without complaint.
+            if Self.isAPIHost(host) {
+                let message = "No certificate pins configured for API host \(host) — "
+                    + "TLS pinning is NOT in effect for this connection."
+                assertionFailure(message)
+                CorrelationLogger.error(tag: "CertificatePinning", message: message)
+            }
             completionHandler(.performDefaultHandling, nil)
             return
         }
@@ -68,6 +82,14 @@ final class CertificatePinningDelegate: NSObject, URLSessionDelegate, URLSession
             }
         }
         completionHandler(.cancelAuthenticationChallenge, nil)
+    }
+
+    /// True when `host` is the API endpoint this SDK talks to, i.e. a host that must be
+    /// pinned. Compared against the configured base URL rather than a hardcoded list so a
+    /// redeployment to a new API domain still trips the check.
+    private static func isAPIHost(_ host: String) -> Bool {
+        guard let apiHost = VihChatBotSDK.shared.config?.apiBaseURL.host else { return false }
+        return host.caseInsensitiveCompare(apiHost) == .orderedSame
     }
 
     /// SHA-256 of the certificate's SubjectPublicKeyInfo, Base64-encoded — the

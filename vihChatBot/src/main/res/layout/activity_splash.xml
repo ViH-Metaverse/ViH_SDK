@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    SECURITY (VAPT F-05, CWE-829): this screen previously hosted a WebView that loaded a
+    third-party Netlify deploy-preview URL. That subdomain is not durably controlled by us,
+    so a lapse would have let anyone claim it and render arbitrary content inside every
+    partner app embedding this SDK. A splash screen needs no remote content — the artwork
+    is a local drawable.
+-->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -6,11 +13,12 @@
     android:layout_height="match_parent"
     tools:context=".ui.activity.splash.SplashActivity">
 
-
-    <WebView
-        android:id="@+id/wvSplash"
+    <ImageView
+        android:id="@+id/ivSplash"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
         android:src="@drawable/background_image"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

@@ -10,7 +10,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.RectF
 import android.net.Uri
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.widget.ImageView
 import android.widget.ProgressBar
@@ -139,7 +139,7 @@ object CustomImageLoader {
                 null
             }
         } catch (e: Exception) {
-            Log.e("CustomImageLoader", "Error loading image from file: ${file.absolutePath}", e)
+            VihLog.e("CustomImageLoader", "Error loading image from file: ${file.absolutePath}", e)
             null
         }
     }
@@ -158,7 +158,7 @@ object CustomImageLoader {
                 null
             }
         } catch (e: Exception) {
-            Log.e("CustomImageLoader", "Error loading image from URI: $uri", e)
+            VihLog.e("CustomImageLoader", "Error loading image from URI: $uri", e)
             null
         }
     }
@@ -280,7 +280,7 @@ object CustomImageLoader {
                     null
                 }
             } catch (e: Exception) {
-                Log.e("CustomImageLoader", "Error loading image from URL: $url", e)
+                VihLog.e("CustomImageLoader", "Error loading image from URL: $url", e)
                 null
             } finally {
                 // Ensure resources are always closed

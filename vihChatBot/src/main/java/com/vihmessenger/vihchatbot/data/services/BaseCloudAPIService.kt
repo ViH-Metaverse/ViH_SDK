@@ -3,31 +3,27 @@ package com.vihmessenger.vihchatbot.data.services
 
 import com.vihmessenger.vihchatbot.AppController
 import com.vihmessenger.vihchatbot.BuildConfig
-import okhttp3.OkHttpClient
-import okhttp3.logging.HttpLoggingInterceptor
+import com.vihmessenger.vihchatbot.api.services.ApiClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
-import java.util.concurrent.TimeUnit
 
+/**
+ * Retrofit instance used by the repositories.
+ *
+ * SECURITY (VAPT F-03 / F-10): this used to build its own bare `OkHttpClient` with neither
+ * certificate pinning nor the auth interceptor — and because this is the client the SDK
+ * actually routes its traffic through, the controls configured on [ApiClient] protected
+ * almost nothing. It now reuses [ApiClient.okHttpClient], so pinning, auth injection and
+ * debug-only logging apply to every request the SDK makes, and connection pooling and
+ * thread pools are shared rather than duplicated.
+ */
 interface BaseCloudAPIService {
 
     companion object {
         operator fun invoke(): Retrofit {
-            val clientBuilder = OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-
-            // SECURITY: Only enable HTTP logging in debug builds
-            if (BuildConfig.DEBUG) {
-                clientBuilder.addInterceptor(
-                    HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BODY)
-                )
-            }
-
-            // SECURITY: Use BuildConfig.API_BASE_URL instead of hardcoded URL
             return Retrofit.Builder()
                 .baseUrl(BuildConfig.API_BASE_URL)
-                .client(clientBuilder.build())
+                .client(ApiClient.okHttpClient)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
         }

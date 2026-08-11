@@ -168,7 +168,11 @@ public final class OtpChatCell: UITableViewCell {
     }
 
     @objc private func copyTapped() {
-        UIPasteboard.general.string = codeToCopy
+        // SECURITY (VAPT F-08, CWE-200): `UIPasteboard.general.string = ...` puts the code on
+        // a surface that syncs to the user's other Apple devices over Universal Clipboard and
+        // stays readable by the next app they foreground, with no expiry. Keep it local to
+        // this device and let it expire.
+        SecureClipboard.copySensitive(codeToCopy)
         copyButton.setTitle("Copied", for: .normal)
         // Revert the label without a timer dependency — reset happens on next reuse/config,
         // but give immediate feedback here.

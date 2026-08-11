@@ -71,15 +71,16 @@ public final class APIClient {
             throw APIError("Invalid response object")
         }
 
-        // TEMP DEBUG (remove before release): logs every request's status + body
-        // so empty lists can be told apart from decode failures. Gated on isDebug.
+        // SECURITY (VAPT F-06): response bodies are NOT logged. The previous block here was
+        // marked "TEMP DEBUG (remove before release)" and dumped the first 1000 bytes of
+        // every response — which on the login and token-exchange endpoints is the bearer
+        // token itself. Status/shape is enough to tell an empty list from a decode failure.
         if VihChatBotSDK.shared.config?.isDebug == true {
             let method = request.httpMethod ?? "GET"
             let urlString = request.url?.absoluteString ?? "?"
             let hasAuth = request.value(forHTTPHeaderField: "Authorization") != nil
-            let bodySnippet = String(data: data.prefix(1000), encoding: .utf8) ?? "<non-utf8 \(data.count) bytes>"
             CorrelationLogger.info(
-                message: "HTTP \(http.statusCode) \(method) \(urlString) auth=\(hasAuth) bytes=\(data.count)\n   body: \(bodySnippet)"
+                message: "HTTP \(http.statusCode) \(method) \(urlString) auth=\(hasAuth) bytes=\(data.count)"
             )
         }
 

@@ -15,10 +15,11 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.service.notification.StatusBarNotification
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
@@ -39,11 +40,15 @@ import com.vihmessenger.vihchatbot.ui.activity.CompanyProfileActivity
 import com.vihmessenger.vihchatbot.ui.activity.VideoActivity
 import com.vihmessenger.vihchatbot.utils.currentDateTime
 import com.vihmessenger.vihchatbot.utils.extensions.setSolidColorFilterCompat
+import com.vihmessenger.vihchatbot.data.model.VoiceBot
+import com.vihmessenger.vihchatbot.utils.getProfileData
 import com.vihmessenger.vihchatbot.utils.getVihSettings
 import com.vihmessenger.vihchatbot.utils.sharedPreference.Prefs
 import com.vihmessenger.vihchatbot.viewmodel.ChatViewModel
+import com.vihmessenger.vihchatbot.viewmodel.ProfileViewModel
 import org.json.JSONObject
 import java.io.File
+import com.vihmessenger.vihchatbot.utils.ExternalUrl
 
 class ChatActivity : BaseActivity() {
 
@@ -83,6 +88,12 @@ class ChatActivity : BaseActivity() {
             intent.putExtra(AppConstants.CHANNEL_LOGO, channel_image)
             intent.putExtra(AppConstants.CHANNEL_EXTRA, channel)
             intent.putExtra(AppConstants.HASHCODE_EXTRA, hashcode)
+            // Headless hosts (React Native / Expo bridges) commonly hand us the
+            // application-scoped context. startActivity() throws AndroidRuntimeException
+            // from a non-Activity context unless NEW_TASK is set.
+            if (context !is android.app.Activity) {
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
             context.startActivity(intent)
         }
     }
@@ -90,13 +101,35 @@ class ChatActivity : BaseActivity() {
     private val _viewBinder by lazy { ActivityChatBinding.inflate(layoutInflater) }
     lateinit var emojiPopup: EmojiPopup
     private lateinit var chatViewModel: ChatViewModel
+    private lateinit var profileViewModel: ProfileViewModel
     private lateinit var chatAdapter: ChatAdapter
 
     private var sessionId: String? = null
     private var hashCodeStr: String? = null
 
+    // Callable voice-bot for the open channel, resolved from that channel's SDK-features.
+    // Null until fetched / when the channel has no active agent — gates the call button.
+    private var voiceBot: VoiceBot? = null
+
     private var hasLoadedChats = false
     private var currentChannel: EnterPriseModel? = null
+
+    // CompanyProfile can change block/mute/promo state; it returns the updated enterprise so
+    // we refresh currentChannel (and the composer guard) in place on return.
+    private val companyProfileLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode != RESULT_OK) return@registerForActivityResult
+            val updated = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                result.data?.getSerializableExtra(AppConstants.CHANNEL_EXTRA, EnterPriseModel::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                result.data?.getSerializableExtra(AppConstants.CHANNEL_EXTRA) as? EnterPriseModel
+            }
+            if (updated != null) {
+                currentChannel = updated
+                updateBlacklistState()
+            }
+        }
 
     // Whether this screen was opened by tapping a push notification (vs. from the chat
     // list). Only then do we retry an empty history fetch, since a pushed message is
@@ -123,7 +156,7 @@ class ChatActivity : BaseActivity() {
         setContentView(_viewBinder.root)
         applyThemeAndSetupListeners()
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
-        Log.d("ChatActivityStatus", "onCreate: View and theme setup process initiated.")
+        VihLog.d("ChatActivityStatus", "onCreate: View and theme setup process initiated.")
 
         val initialFallbackColor = ContextCompat.getColor(this, R.color.status_bar_grey)
         updateStatusBarColor(initialFallbackColor)
@@ -133,15 +166,32 @@ class ChatActivity : BaseActivity() {
         chatViewModel = getViewModel(
             viewModel = ChatViewModel(this), className = ChatViewModel::class.java
         )
+        profileViewModel = getViewModel(
+            viewModel = ProfileViewModel(this), className = ProfileViewModel::class.java
+        )
+    }
+
+    /**
+     * Hide the composer and show a "blocked" banner (with an Unblock action) when the user
+     * has blocked this enterprise. The backend rejects such sends with 2003, so this stops
+     * the user firing a message that would silently fail. Safe to call before [currentChannel]
+     * is loaded — a null flag reads as not-blocked.
+     */
+    private fun updateBlacklistState() {
+        val blocked = currentChannel?.is_blacklisted_by_user == true
+        _viewBinder.llChatInbox.visibility = if (blocked) View.GONE else View.VISIBLE
+        _viewBinder.lyBlacklistedState.visibility = if (blocked) View.VISIBLE else View.GONE
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun initView() {
         setupCustomToolbar()
 
+        updateBlacklistState()
+
         val enterpriseId = intent.getStringExtra(AppConstants.ID)
         if (currentChannel == null && !enterpriseId.isNullOrBlank()) {
-            Log.d(TAG, "currentChannel is null (likely from FCM). Fetching enterprise details for ID: $enterpriseId")
+            VihLog.d(TAG, "currentChannel is null (likely from FCM). Fetching enterprise details for ID: $enterpriseId")
             chatViewModel.getEnterpriceModel(showBlockingLoader = false, enterpriseId = enterpriseId)
         }
 
@@ -157,7 +207,15 @@ class ChatActivity : BaseActivity() {
         hashCodeStr = intent.getStringExtra(AppConstants.HASHCODE_EXTRA)?.takeIf { it.isNotBlank() }
             ?: prefs.hashcode
 
+        // Resolve whether this channel has an active voice-bot so the toolbar can show the
+        // call button (gated in setObservers on the sdkFeatureLiveData result).
+        chatViewModel.fetchSdkFeatures(hashCodeStr ?: "")
+
         setRecyclerView()
+
+        _viewBinder.btnUnblock.setOnClickListener {
+            currentChannel?.let { profileViewModel.blacklistEnterprise(it.id, blacklist = false) }
+        }
 
         _viewBinder.lyChatInbox.ibSendChat.setOnClickListener {
             val messageText = _viewBinder.lyChatInbox.edtChatInbox.editableText.toString().trim()
@@ -227,20 +285,23 @@ class ChatActivity : BaseActivity() {
                 enterpriseId
             )
         } else {
-            Log.e(TAG, "Hashcode is null")
+            VihLog.e(TAG, "Hashcode is null")
             _viewBinder.pbChat.visibility = View.GONE
             updateFirstMessageVisibility()
         }
 
         _viewBinder.chatAppBar.llToolChat.setOnClickListener {
             if (currentChannel != null) {
-                startActivity(Intent(this@ChatActivity, CompanyProfileActivity::class.java).apply {
-                    Log.d(TAG, "Starting CompanyProfileActivity with channel: $currentChannel")
-                    putExtra(AppConstants.CHANNEL_EXTRA, currentChannel)
-                })
+                companyProfileLauncher.launch(
+                    Intent(this@ChatActivity, CompanyProfileActivity::class.java).apply {
+                        VihLog.d(TAG, "Starting CompanyProfileActivity with channel: $currentChannel")
+                        putExtra(AppConstants.CHANNEL_EXTRA, currentChannel)
+                        putExtra(AppConstants.HASHCODE_EXTRA, hashCodeStr)
+                    }
+                )
             } else {
                 Toast.makeText(this, "Loading details...", Toast.LENGTH_SHORT).show()
-                Log.w(TAG, "Toolbar clicked but currentChannel details are not yet available.")
+                VihLog.w(TAG, "Toolbar clicked but currentChannel details are not yet available.")
             }
         }
         _viewBinder.chatAppBar.ivBackArrow.setOnClickListener {
@@ -253,13 +314,23 @@ class ChatActivity : BaseActivity() {
     }
 
     private fun launchVoicebot() {
-        val session = sessionId
-        if (session.isNullOrBlank()) {
-            Log.w(TAG, "launchVoicebot: sessionId is blank — aborting")
+        val vb = voiceBot
+        if (vb == null || !vb.isCallable) {
+            VihLog.w(TAG, "launchVoicebot: no callable voice_bot for this channel — aborting")
             return
         }
+        // Caller's first name, derived from the logged-in user's full_name ("Rahul Sharma" ->
+        // "Rahul"). Empty is acceptable — the agent copes without a name.
+        val firstName = getProfileData()?.full_name.orEmpty()
+            .trim().split(Regex("\\s+")).firstOrNull().orEmpty()
         startActivity(
-            com.vihmessenger.vihchatbot.ui.activity.VoicebotActivity.startIntent(this, session)
+            com.vihmessenger.vihchatbot.ui.activity.VoicebotActivity.startIntent(
+                context = this,
+                wsUrl = vb.wsUrl!!,
+                botKey = vb.botKey!!,
+                firstName = firstName,
+                agentName = vb.name.orEmpty()
+            )
         )
     }
 
@@ -279,7 +350,7 @@ class ChatActivity : BaseActivity() {
         }
 
         if (channelFromIntent != null) {
-            Log.d(TAG, "Setting up toolbar using CHANNEL_EXTRA (EnterPriseModel).")
+            VihLog.d(TAG, "Setting up toolbar using CHANNEL_EXTRA (EnterPriseModel).")
             this.currentChannel = channelFromIntent
             // Resolve across all name/logo fields — the discover API leaves display_name and
             // display_img null, so reading them directly showed a blank "Chat" toolbar and made
@@ -287,7 +358,7 @@ class ChatActivity : BaseActivity() {
             channelName = currentChannel?.resolvedDisplayName?.takeIf { it.isNotBlank() }
             channelLogoUrl = currentChannel?.resolvedLogoUrl
         } else {
-            Log.d(TAG, "CHANNEL_EXTRA is null. Setting up toolbar using fallback extras (CHANNEL_NAME, CHANNEL_LOGO).")
+            VihLog.d(TAG, "CHANNEL_EXTRA is null. Setting up toolbar using fallback extras (CHANNEL_NAME, CHANNEL_LOGO).")
             this.currentChannel = null
             channelName = intent.getStringExtra(AppConstants.CHANNEL_NAME)
             channelLogoUrl = intent.getStringExtra(AppConstants.CHANNEL_LOGO)
@@ -349,6 +420,15 @@ class ChatActivity : BaseActivity() {
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun setObservers() {
+        // Show the toolbar call button only when the open channel has an active, callable
+        // voice-bot. Any error / null result keeps it hidden.
+        chatViewModel.sdkFeatureLiveData.observe(this) { features ->
+            val vb = features?.voice_bot?.takeIf { it.isCallable }
+            voiceBot = vb
+            _viewBinder.chatAppBar.btnVoicebot.visibility =
+                if (vb != null) View.VISIBLE else View.GONE
+        }
+
         chatViewModel.chatMessageLiveData.observe(this) { response ->
             chatAdapter.removeProgressMessage()
             response?.data?.let { data ->
@@ -389,11 +469,13 @@ class ChatActivity : BaseActivity() {
             if (response != null && response.status) {
                 val enterpriseModelFromApi = response.data
                 this.currentChannel = enterpriseModelFromApi
-                Log.d(TAG, "Successfully fetched and stored enterprise details: ${currentChannel?.displayNameModel?.display_name}")
+                VihLog.d(TAG, "Successfully fetched and stored enterprise details: ${currentChannel?.displayNameModel?.display_name}")
                 // Re-update visibility in case the display_msg is now available
                 updateFirstMessageVisibility()
+                // enterprise-details carries the fresh is_blacklisted_by_user flag.
+                updateBlacklistState()
             } else {
-                Log.e(TAG, "Failed to fetch enterprise details.")
+                VihLog.e(TAG, "Failed to fetch enterprise details.")
             }
         }
 
@@ -406,21 +488,21 @@ class ChatActivity : BaseActivity() {
                 // retry a few times before falling back to the empty/welcome state.
                 if (isLaunchedFromNotification && historyRetryCount < MAX_HISTORY_RETRIES) {
                     historyRetryCount++
-                    Log.d(TAG, "Chat history empty after notification tap — retry $historyRetryCount/$MAX_HISTORY_RETRIES in ${HISTORY_RETRY_DELAY_MS}ms")
+                    VihLog.d(TAG, "Chat history empty after notification tap — retry $historyRetryCount/$MAX_HISTORY_RETRIES in ${HISTORY_RETRY_DELAY_MS}ms")
                     historyRetryHandler.postDelayed({ getAllChats() }, HISTORY_RETRY_DELAY_MS)
                     return@observe
                 }
                 // History is empty. Do nothing to the adapter.
                 // The welcome text will be shown by updateFirstMessageVisibility.
                 _viewBinder.pbChat.visibility = View.GONE
-                Log.d(TAG, "Chat history is empty. The 'tvfirstMsg' view will be shown.")
+                VihLog.d(TAG, "Chat history is empty. The 'tvfirstMsg' view will be shown.")
             } else {
                 // History exists — the message arrived; stop any pending retries.
                 historyRetryCount = 0
                 historyRetryHandler.removeCallbacksAndMessages(null)
                 _viewBinder.pbChat.visibility = View.GONE
                 // History exists. Populate the adapter.
-                Log.d(TAG, "Chat history received with ${chatHistoryData.size} messages.")
+                VihLog.d(TAG, "Chat history received with ${chatHistoryData.size} messages.")
                 val lastMessage = chatHistoryData.lastOrNull()
                 val targetCpaasIdToClear: String? = lastMessage?.cpaas_json?.id?.toString()
 
@@ -457,6 +539,16 @@ class ChatActivity : BaseActivity() {
                 updateFirstMessageVisibility()
                 Toast.makeText(this, "Something Went Wrong", Toast.LENGTH_SHORT).show()
             }
+        }
+
+        // Unblock from the blacklisted banner restores the composer in place.
+        profileViewModel.blacklistResultLiveData.observe(this) { blocked ->
+            currentChannel?.is_blacklisted_by_user = blocked
+            updateBlacklistState()
+            if (!blocked) Toast.makeText(this, "Business unblocked", Toast.LENGTH_SHORT).show()
+        }
+        profileViewModel.enterpriseMutationError.observe(this) { msg ->
+            Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -573,7 +665,7 @@ class ChatActivity : BaseActivity() {
                 "action" -> handleInteractiveAction(value)
                 // Unknown type (the server drops these, but be safe): ignore rather than risk
                 // sending a link as a message.
-                else -> Log.d(TAG, "Ignoring interactive button of unknown type: ${button.type}")
+                else -> VihLog.d(TAG, "Ignoring interactive button of unknown type: ${button.type}")
             }
         }
 
@@ -582,13 +674,8 @@ class ChatActivity : BaseActivity() {
                 Toast.makeText(this@ChatActivity, "Invalid link", Toast.LENGTH_SHORT).show()
                 return
             }
-            var url = rawUrl
-            if (!url.startsWith("http://") && !url.startsWith("https://")) url = "https://$url"
-            try {
-                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-            } catch (e: ActivityNotFoundException) {
-                Toast.makeText(this@ChatActivity, "Cannot open link.", Toast.LENGTH_SHORT).show()
-            }
+            // SECURITY (VAPT F-16): scheme allowlist + https upgrade, centrally enforced.
+            ExternalUrl.open(this@ChatActivity, rawUrl)
         }
 
         // Named in-app capability. We handle call-support natively; anything else degrades
@@ -605,7 +692,7 @@ class ChatActivity : BaseActivity() {
                     }
                 }
                 else -> {
-                    Log.d(TAG, "Unhandled interactive action: $action")
+                    VihLog.d(TAG, "Unhandled interactive action: $action")
                     Toast.makeText(this@ChatActivity, "This option isn't available yet.", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -632,24 +719,16 @@ class ChatActivity : BaseActivity() {
                 }
                 "web" -> {
                     if (!btnValue.isNullOrEmpty()) {
-                        var url = btnValue.trim()
-                        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                            url = "http://$url"
-                        }
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                        try {
-                            startActivity(intent)
-                        } catch (e: ActivityNotFoundException) {
-                            e.printStackTrace()
-                            Toast.makeText(this@ChatActivity, "Cannot open link.", Toast.LENGTH_SHORT).show()
-                        }
+                        // SECURITY (VAPT F-16): this branch used to DOWNGRADE a scheme-less
+                        // URL to http://. Now allowlisted and upgraded to https.
+                        ExternalUrl.open(this@ChatActivity, btnValue)
                     } else {
                         Toast.makeText(this@ChatActivity, "Invalid URL", Toast.LENGTH_SHORT).show()
                     }
                 }
                 else -> {
                     if (btnValue.isNullOrBlank()) {
-                        Log.d(TAG, "Button click with empty value and unhandled/empty type: $btnType")
+                        VihLog.d(TAG, "Button click with empty value and unhandled/empty type: $btnType")
                         return
                     }
                     handleDefaultButtonAction(btnValue)
@@ -719,7 +798,7 @@ class ChatActivity : BaseActivity() {
                         @Suppress("DEPRECATION")
                         intent.getSerializableExtra(AppConstants.CHANNEL_EXTRA) as? EnterPriseModel
                     }
-                Log.e(TAG, "onVideoClick - Channel retrieved: $channel")
+                VihLog.e(TAG, "onVideoClick - Channel retrieved: $channel")
 
                 val videoUriString = Uri.fromFile(videoFile).toString()
                 VideoActivity.startIntent(
@@ -785,15 +864,15 @@ class ChatActivity : BaseActivity() {
                 val activeNotifications: Array<StatusBarNotification> =
                     notificationManager.activeNotifications
 
-                Log.d("ActiveNotifications", "Found ${activeNotifications.size} active notifications for this app.")
+                VihLog.d("ActiveNotifications", "Found ${activeNotifications.size} active notifications for this app.")
                 for (statusBarNotification in activeNotifications) {
                     val notification = statusBarNotification.notification
                     val title = notification.extras.getString("android.title")
                     val text = notification.extras.getString("android.text")
-                    Log.d("ActiveNotifications", "ID: ${statusBarNotification.id}, Tag: ${statusBarNotification.tag}, Title: $title, Text: $text")
+                    VihLog.d("ActiveNotifications", "ID: ${statusBarNotification.id}, Tag: ${statusBarNotification.tag}, Title: $title, Text: $text")
                 }
             } catch (e: Exception) {
-                Log.e("ActiveNotifications", "Error getting active notifications", e)
+                VihLog.e("ActiveNotifications", "Error getting active notifications", e)
             }
         }
     }
@@ -817,21 +896,21 @@ class ChatActivity : BaseActivity() {
                             val cpaasIdInNotification = cpaasJson.optString("id")
 
                             if (cpaasIdInNotification == targetCpaasContentId) {
-                                Log.i("NotificationClear", "MATCH FOUND! Clearing Android Notification ID: ${statusBarNotification.id}")
+                                VihLog.i("NotificationClear", "MATCH FOUND! Clearing Android Notification ID: ${statusBarNotification.id}")
                                 notificationManager.cancel(statusBarNotification.id)
                                 clearedCount++
                             }
                         } catch (e: org.json.JSONException) {
-                            Log.e("NotificationClear", "Error parsing cpaas_json from notification extras.", e)
+                            VihLog.e("NotificationClear", "Error parsing cpaas_json from notification extras.", e)
                         }
                     }
                 }
 
                 if (clearedCount > 0) {
-                    Log.i("NotificationClear", "Cleared $clearedCount notifications matching cpaas_id: $targetCpaasContentId")
+                    VihLog.i("NotificationClear", "Cleared $clearedCount notifications matching cpaas_id: $targetCpaasContentId")
                 }
             } catch (e: Exception) {
-                Log.e("NotificationClear", "Error accessing/clearing active notifications", e)
+                VihLog.e("NotificationClear", "Error accessing/clearing active notifications", e)
             }
         }
     }

@@ -2,10 +2,10 @@ package com.vihmessenger.vihchatbot.utils.sharedPreference
 
 import android.content.Context
 import android.content.SharedPreferences
-import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKeys
+import androidx.security.crypto.MasterKey
 import com.vihmessenger.vihchatbot.constants.AppConstants
+import com.vihmessenger.vihchatbot.utils.VihLog
 
 class Prefs private constructor(context: Context) {
 
@@ -21,20 +21,84 @@ class Prefs private constructor(context: Context) {
             }
     }
 
-    private val preferences: SharedPreferences = try {
-        // SECURITY: Use EncryptedSharedPreferences to protect sensitive data at rest
-        val masterKeyAlias = MasterKeys.getOrCreate(MasterKeys.AES256_GCM_SPEC)
+    /**
+     * True when tokens and PII are being held in encrypted storage that survives a restart.
+     * False means [InMemorySharedPreferences] is in use: the SDK still works, but nothing is
+     * persisted, so the user must sign in again on the next launch. Host apps can read this
+     * to decide whether to surface a message.
+     */
+    @Volatile
+    var isSecureStorageAvailable: Boolean = true
+        private set
+
+    private val preferences: SharedPreferences = createSecurePreferences(context)
+
+    /**
+     * Builds AES-256 encrypted preferences, retrying once after clearing the corrupt state.
+     *
+     * SECURITY (VAPT F-07, CWE-311): this used to fall back to plaintext `MODE_PRIVATE`
+     * preferences on any failure, which silently wrote access tokens, refresh tokens, the
+     * phone number and the full user profile to a backup-eligible XML file — with only a
+     * `Log.w` to mark it, so neither the user nor the app could tell. `security-crypto` does
+     * genuinely fail on some OEM builds and after a Keystore reset or restore-to-new-device,
+     * so the path is reachable in the field, not just in theory.
+     *
+     * The first failure is usually a stale keyset whose Keystore key no longer exists (the
+     * classic restore-to-new-device symptom), which clearing and recreating fixes. If it
+     * still fails we degrade to memory-only storage: credentials are never written to disk
+     * in the clear, and the cost is a re-login next launch.
+     */
+    private fun createSecurePreferences(context: Context): SharedPreferences {
+        buildEncrypted(context)?.let { return it }
+
+        VihLog.w("Prefs", "EncryptedSharedPreferences init failed — clearing keyset and retrying.")
+        clearCorruptSecureState(context)
+
+        buildEncrypted(context)?.let {
+            VihLog.i("Prefs", "EncryptedSharedPreferences recovered after reset.")
+            return it
+        }
+
+        // Do NOT fall back to plaintext. Memory-only means the session cannot outlive the
+        // process, which is a far better failure than persisting credentials unencrypted.
+        isSecureStorageAvailable = false
+        VihLog.e(
+            "Prefs",
+            "Secure storage unavailable — using memory-only preferences. " +
+                "Session will not persist across restarts."
+        )
+        return InMemorySharedPreferences()
+    }
+
+    private fun buildEncrypted(context: Context): SharedPreferences? = try {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
         EncryptedSharedPreferences.create(
-            ENCRYPTED_PREF_NAME,
-            masterKeyAlias,
             context,
+            ENCRYPTED_PREF_NAME,
+            masterKey,
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
     } catch (e: Exception) {
-        // Fallback: if encryption fails (e.g., on very old devices), log warning and use standard prefs
-        Log.w("Prefs", "EncryptedSharedPreferences unavailable, falling back to standard preferences")
-        context.getSharedPreferences(AppConstants.AppSharedPref, Context.MODE_PRIVATE)
+        VihLog.w("Prefs", "EncryptedSharedPreferences.create failed: ${e.javaClass.simpleName}")
+        null
+    }
+
+    /**
+     * Drops the encrypted preference file and any legacy plaintext file left behind by the
+     * old fallback path. The legacy wipe matters on upgrade: a device that previously hit
+     * the plaintext fallback still has those credentials sitting on disk, and this is the
+     * only place that will ever clean them up.
+     */
+    private fun clearCorruptSecureState(context: Context) {
+        runCatching {
+            context.getSharedPreferences(ENCRYPTED_PREF_NAME, Context.MODE_PRIVATE)
+                .edit().clear().commit()
+        }
+        runCatching { context.deleteSharedPreferences(ENCRYPTED_PREF_NAME) }
+        runCatching { context.deleteSharedPreferences(AppConstants.AppSharedPref) }
     }
 
     var vihSettings: String?
@@ -80,6 +144,16 @@ class Prefs private constructor(context: Context) {
     var isSDK: Boolean
         get() = preferences.getBoolean(AppConstants.IS_SDK_MODE, false)
         set(value) = preferences.edit().putBoolean(AppConstants.IS_SDK_MODE, value).apply()
+
+    /**
+     * True when the host application drives the SDK headlessly — i.e. it called
+     * `VihDiscover.prepareSession` and renders its own enterprise list, instead of
+     * launching the SDK's splash. In that mode the SDK must never relaunch the host's
+     * launcher activity on session expiry: doing so wipes the host's task stack.
+     */
+    var isHostDriven: Boolean
+        get() = preferences.getBoolean(AppConstants.IS_HOST_DRIVEN, false)
+        set(value) = preferences.edit().putBoolean(AppConstants.IS_HOST_DRIVEN, value).apply()
 
     // Shortcut preferences
     var shortcutPromptCount: Int

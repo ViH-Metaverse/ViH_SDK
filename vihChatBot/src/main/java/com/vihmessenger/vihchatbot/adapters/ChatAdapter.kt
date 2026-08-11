@@ -29,6 +29,7 @@ import com.vihmessenger.vihchatbot.databinding.ItemLeftChatProgressBinding
 import com.vihmessenger.vihchatbot.databinding.ItemRightChatBinding
 import com.vihmessenger.vihchatbot.listener.onItemChatClickListener
 import java.util.regex.Pattern
+import com.vihmessenger.vihchatbot.utils.SecureClipboard
 
 class ChatAdapter(
     var context: Context,
@@ -374,10 +375,12 @@ class ChatAdapter(
 
             val copyText = code ?: body
             binding.tvOtpCopy.setOnClickListener {
-                val clipboard =
-                    context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                clipboard.setPrimaryClip(ClipData.newPlainText("OTP", copyText))
-                Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                // SECURITY (VAPT F-08): sensitive, self-expiring clip — not a bare setPrimaryClip.
+                if (SecureClipboard.copySensitive(context, "OTP", copyText)) {
+                    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
+                } else {
+                    Toast.makeText(context, "Failed to copy", Toast.LENGTH_SHORT).show()
+                }
             }
 
             val src = message.source

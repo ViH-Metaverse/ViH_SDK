@@ -7,11 +7,11 @@ plugins {
 
 android {
     namespace 'com.vihmessenger.vihchatbot'
-    compileSdk 35
+    compileSdk 36
 
     defaultConfig {
         minSdk 24
-        targetSdk 35
+        targetSdk 36
         versionCode 1
         versionName "1.0.0"
 
@@ -58,6 +58,28 @@ android {
         release {
         }
     }
+
+    // SECURITY (VAPT F-23): the release build type was empty and nothing gated the build on
+    // lint, so security-relevant lint checks could regress silently. Fail the build on any
+    // lint error and treat the security-critical checks as errors rather than warnings.
+    lint {
+        abortOnError true
+        warningsAsErrors false
+        checkReleaseBuilds true
+        error 'SetJavaScriptEnabled',
+              'UnsafeProtectedBroadcastReceiver',
+              'ExportedActivity',
+              'ExportedService',
+              'ExportedReceiver',
+              'ExportedContentProvider',
+              'GrantAllUris',
+              'WorldReadableFiles',
+              'WorldWriteableFiles',
+              'TrustAllX509TrustManager',
+              'BadHostnameVerifier',
+              'AllowBackup',
+              'UnsafeDynamicallyLoadedCode'
+    }
     compileOptions {
         // Required by AWS Amplify (Cognito) — backports java.time etc. to minSdk 24.
         coreLibraryDesugaringEnabled true
@@ -99,6 +121,9 @@ dependencies {
     implementation "com.squareup.retrofit2:retrofit:${retrofit_version}"
     implementation "com.google.code.gson:gson:${gson_version}"
     implementation "com.squareup.retrofit2:converter-gson:${retrofit_converter_gson_version}"
+    // SECURITY (VAPT F-17): pin OkHttp explicitly rather than inheriting whatever Retrofit
+    // drags in — 4.12.0 fixes GHSA-w33c-445m-f8w7 (GzipSource DoS).
+    implementation "com.squareup.okhttp3:okhttp:${okhttp_version}"
     implementation "com.squareup.okhttp3:logging-interceptor:${okhttp_interceptor_version}"
 
     //Coroutines
@@ -124,7 +149,7 @@ dependencies {
     implementation 'com.github.lincollincol:amplituda:2.3.1'
     implementation 'com.vanniktech:emoji-google:0.18.0'
     implementation 'androidx.emoji2:emoji2:1.4.0'
-    implementation 'com.google.firebase:firebase-messaging:23.1.0'
+    implementation "com.google.firebase:firebase-messaging:${firebase_messaging_version}"
     implementation 'com.bugfender.sdk:android:3.1.1'
 
     // Security - EncryptedSharedPreferences
@@ -135,13 +160,13 @@ dependencies {
     implementation "com.amplifyframework:core-kotlin:${amplify_version}"
     coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:${desugar_jdk_libs_version}"
 
-    implementation 'io.michaelrocks:libphonenumber-android:8.12.44'
+    implementation "io.michaelrocks:libphonenumber-android:${libphonenumber_android_version}"
     implementation 'com.github.joielechong:countrycodepicker:2.4.2'
     implementation "androidx.lifecycle:lifecycle-process:2.8.3"
 
-    // Ultravox client SDK — powers the voicebot real-time audio call.
-    // Joined via the wss URL returned by /main/loan-approval/.
-    api "ai.fixie:ultravox-client-sdk:${ultravox_sdk_version}"
+    // The voice-bot call uses a raw OkHttp WebSocket + Android AudioRecord/AudioTrack
+    // (see VoicebotActivity). OkHttp is already on the classpath via Retrofit; no extra
+    // real-time-audio SDK is needed.
 }
 
 // Shared POM metadata for every flavor publication.
@@ -172,20 +197,23 @@ def applyVihPom = { pom ->
 afterEvaluate {
     publishing {
         publications {
-            // Both flavors now target https://api.platform.vihresearchlabs.ai/
-            // (prod host vihapi.plugseal.com retired — see local.properties).
+            // Both flavors target https://api.platform.vihresearchlabs.ai/ and are therefore
+            // interchangeable. The staging flavor was briefly pointed at api.dev.platform
+            // during development; that was reverted before 1.1.5 shipped.
+            // (legacy hosts vihapi.plugseal.com / stagingnlp.vihmessenger.com are retired.)
+            // JitPack builds with no local.properties, so the defaults above are what ship.
             stagingRelease(MavenPublication) {
                 from components.stagingRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk-staging'
-                version = '1.1.4'   // + custom Discover facade, floating widget (image/pop/unread badge), per-template notification tones, home-screen shortcut
+                version = '1.1.5'   // + silent session renewal, no host-app relaunch on expiry, Discover kept under R8, voice-bot raw-WS call, VAPT hardening
                 applyVihPom(pom)
             }
             prodRelease(MavenPublication) {
                 from components.prodRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk'
-                version = '1.1.4'  // + custom Discover facade, floating widget (image/pop/unread badge), per-template notification tones, home-screen shortcut
+                version = '1.1.5'  // + silent session renewal, no host-app relaunch on expiry, Discover kept under R8, voice-bot raw-WS call, VAPT hardening
                 applyVihPom(pom)
             }
         }

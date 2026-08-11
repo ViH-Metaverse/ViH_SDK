@@ -4,16 +4,20 @@ import BaseActivity
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import androidx.lifecycle.lifecycleScope
 import com.vihmessenger.vihchatbot.databinding.ActivitySplashBinding
 import com.vihmessenger.vihchatbot.ui.activity.home.DashBoardActivity
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
+/**
+ * Brand splash shown while the SDK warms up.
+ *
+ * SECURITY (VAPT F-05): this used to render a remote Netlify deploy-preview URL in a
+ * WebView, which handed render authority inside partner apps to a third-party host on a
+ * subdomain we do not durably control. The artwork is now a local drawable and there is no
+ * WebView, no network fetch, and no JavaScript on this screen.
+ */
 class SplashActivity : BaseActivity() {
     private val _viewBinder by lazy { ActivitySplashBinding.inflate(layoutInflater) }
 
@@ -22,31 +26,17 @@ class SplashActivity : BaseActivity() {
         setContentView(_viewBinder.root)
     }
 
-    private suspend fun gotoMainActivity() {
-        delay(3000)
-        startActivity(Intent(this, DashBoardActivity::class.java))
-    }
-
-    private fun coroutineScope() {
-        GlobalScope.launch {
-            delay(1200)
-            withContext(Dispatchers.Main) {
-                gotoMainActivity()
-            }
-        }
-    }
-
     override fun initViewModels() {
-
     }
 
     override fun initView() {
-        _viewBinder.wvSplash.loadUrl("https://65f3d16d0688d40cf9fcac12--fluffy-concha-9b12d1.netlify.app/")
-        _viewBinder.wvSplash.webViewClient = object : WebViewClient() {
-            override fun onPageFinished(view: WebView?, url: String?) {
-                super.onPageFinished(view, url)
-                coroutineScope()
-            }
+        // Hold the brand frame briefly, then continue. Scoped to the lifecycle so rotating
+        // or backing out cancels the pending navigation instead of leaking (the previous
+        // GlobalScope launch survived the Activity).
+        lifecycleScope.launch {
+            delay(SPLASH_HOLD_MS)
+            startActivity(Intent(this@SplashActivity, DashBoardActivity::class.java))
+            finish()
         }
     }
 
@@ -67,5 +57,10 @@ class SplashActivity : BaseActivity() {
         headerColor: Int,
         defaultTextColor: Int
     ) {
+    }
+
+    private companion object {
+        /** Matches the previous perceived duration (1.2s page load + 3s delay). */
+        const val SPLASH_HOLD_MS = 1500L
     }
 }

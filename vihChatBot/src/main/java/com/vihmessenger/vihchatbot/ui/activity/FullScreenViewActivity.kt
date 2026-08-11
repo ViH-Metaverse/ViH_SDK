@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import com.vihmessenger.vihchatbot.R
 import com.vihmessenger.vihchatbot.databinding.ActivityFullScreenViewBinding
+import com.vihmessenger.vihchatbot.utils.ScreenCapturePolicy
 
 class FullScreenViewActivity : AppCompatActivity() {
 
@@ -16,6 +17,8 @@ class FullScreenViewActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // SECURITY (VAPT F-09): this screen bypasses BaseActivity, so apply the policy directly.
+        ScreenCapturePolicy.apply(this)
         enableEdgeToEdge()
         setContentView(_viewBinder.root)
 

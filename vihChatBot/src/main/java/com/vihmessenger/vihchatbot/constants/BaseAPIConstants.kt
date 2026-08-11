@@ -26,12 +26,17 @@ object BaseAPIConstants {
     const val SUBSCRIBE_CHANNEL = "account/subscribe-channel/"
     const val USER_LOGOUT = "account/logout/"
 
+    // Per-enterprise state mutations (read side is the four flags on EnterPriseModel).
+    // Block/unblock the enterprise for this user (UserBlacklistEnterprise).
+    const val USER_BLACKLIST_ENTERPRISE = "developer/user-blacklist-enterprise/"
+    // Mute/unmute the enterprise for this (user, channel).
+    const val MUTE_ENTERPRISE = "main/mute-enterprise-user-channel/"
+    // Promotional opt-in/out for this (user, channel, enterprise). Note: promotional_opt_in
+    // is the INVERSE of the read flag is_promotional_message_blocked.
+    const val USER_CHANNEL_ENTERPRISE_CONFIG = "main/user-channel-enterprise-configuration/"
+
     // AWS migration — Phase 1. Session registry endpoint (architecture §3.3) that maps
     // deviceId -> FCM token in ElastiCache Redis. Path is provisional; the backend team
     // owns the final route. Update here when finalized — no other call sites need to change.
     const val REGISTER_FCM_TOKEN = "main/sdk-device-token/"
-
-    // Loan-approval voice call lives on a separate host from the main API.
-    const val LOAN_APPROVAL_URL = "https://developer-portal.vihresearchlabs.ai/main/loan-approval/"
-    const val CALL_DETAILS_URL = "https://developer-portal.vihresearchlabs.ai/main/call-details/"
 }

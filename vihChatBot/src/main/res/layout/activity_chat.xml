@@ -106,4 +106,51 @@
             android:layout_height="wrap_content"
             android:layout_margin="@dimen/_7sdp" />
     </androidx.appcompat.widget.LinearLayoutCompat>
+
+    <!-- Shown in place of the composer when the user has blocked this business.
+         Read-only banner: sending is rejected server-side (2003), so hide the input
+         rather than let the user fire a message that will silently fail. -->
+    <LinearLayout
+        android:id="@+id/lyBlacklistedState"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/vih_surface"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="@dimen/_12sdp"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <ImageView
+            android:layout_width="@dimen/_16sdp"
+            android:layout_height="@dimen/_16sdp"
+            android:layout_marginEnd="@dimen/_8sdp"
+            android:src="@drawable/ic_block" />
+
+        <TextView
+            android:id="@+id/tvBlacklistedMessage"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/rubik_light"
+            android:text="You've blocked this business. Unblock it to send messages."
+            android:textColor="@color/vih_text_secondary"
+            android:textSize="@dimen/_10ssp" />
+
+        <TextView
+            android:id="@+id/btnUnblock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/_8sdp"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:fontFamily="@font/rubik_medium"
+            android:padding="@dimen/_6sdp"
+            android:text="Unblock"
+            android:textColor="@color/primarycolor"
+            android:textSize="@dimen/_11ssp" />
+    </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

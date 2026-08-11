@@ -9,7 +9,7 @@ import android.content.res.ColorStateList
 import android.graphics.PorterDuff
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -58,7 +58,7 @@ class SettingFragment : BaseFragment() {
     ): View? {
         _viewBinder = FragmentSettingBinding.inflate(inflater, container, false)
 
-        Log.e(TAG, "onCreateView: ${Prefs.getInstance(requireContext()).isSDK}")
+        VihLog.e(TAG, "onCreateView: ${Prefs.getInstance(requireContext()).isSDK}")
 
         if (Prefs.getInstance(requireContext()).isSDK) {
             _viewBinder?.apply {
@@ -196,7 +196,7 @@ class SettingFragment : BaseFragment() {
                         "No application can handle this request. Please install a web browser.",
                         Toast.LENGTH_LONG
                     ).show()
-                    Log.e(
+                    VihLog.e(
                         TAG,
                         "ActivityNotFoundException for web URL: $TERMS_AND_CONDITIONS_URL",
                         e
@@ -215,7 +215,7 @@ class SettingFragment : BaseFragment() {
                         "No application can handle this request. Please install a web browser.",
                         Toast.LENGTH_LONG
                     ).show()
-                    Log.e(
+                    VihLog.e(
                         TAG,
                         "ActivityNotFoundException for web URL: $PRIVACY_POLICY_URL",
                         e
@@ -248,7 +248,7 @@ class SettingFragment : BaseFragment() {
             }
         }
         profileViewModel.userProfileLogout.observe(viewLifecycleOwner) { response ->
-            Log.e(TAG, "setObservers: ${response}")
+            VihLog.e(TAG, "setObservers: ${response}")
             finishLogout()
         }
         // Logout is best-effort: even when the API call fails (server error, timeout,
@@ -256,7 +256,7 @@ class SettingFragment : BaseFragment() {
         // we must still clear the local session and route to login. Without this
         // observer the screen would freeze with the user neither logged out nor in.
         profileViewModel.userProfileLogoutError.observe(viewLifecycleOwner) { error ->
-            Log.e(TAG, "logout error (clearing session anyway): $error")
+            VihLog.e(TAG, "logout error (clearing session anyway): $error")
             finishLogout()
         }
         // Channel switch: only persist the new hashkey + relaunch once the backend has

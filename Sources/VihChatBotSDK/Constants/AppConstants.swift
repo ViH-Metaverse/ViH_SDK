@@ -10,6 +10,11 @@ public enum AppConstants {
 
     public static let hashcodeExtra = "hashcode_extra"
     public static let phoneNumber = "phoneNumber"
+    /// Keychain account names for name/email. Distinct from the legacy "USER_NAME" /
+    /// "USER_EMAIL" UserDefaults keys so the migration in `Prefs` can tell them apart
+    /// (VAPT F-15).
+    public static let userName = "UserName"
+    public static let userEmail = "UserEmail"
     public static let flavor = "flavor"
     public static let sendId = "bot"
     public static let cpaas = "cpaas"

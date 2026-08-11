@@ -2,7 +2,6 @@ package com.vihmessenger.vihchatbot.adapters
 
 import android.content.Context
 import android.graphics.drawable.GradientDrawable
-import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -117,6 +116,12 @@ class ChatListAdapter(
                 } else {
                     txtCountUnread.visibility = View.GONE
                 }
+
+                // Reflect per-enterprise state (nullable flags => compare with == true).
+                tvBlocked.visibility =
+                    if (chatItem.enterprise.is_blacklisted_by_user == true) View.VISIBLE else View.GONE
+                ivMuteIcon.visibility =
+                    if (chatItem.enterprise.is_muted_by_user == true) View.VISIBLE else View.GONE
             }
         }
     }

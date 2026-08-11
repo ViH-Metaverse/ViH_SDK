@@ -11,7 +11,9 @@ public final class Prefs {
     private let defaults = UserDefaults.standard
     private let keychainService = "com.vihmessenger.vihchatbot.secure"
 
-    private init() {}
+    private init() {
+        migrateLegacyPlaintextPII()
+    }
 
     // MARK: - Sensitive (Keychain)
 
@@ -35,6 +37,23 @@ public final class Prefs {
         set { keychainWrite(AppConstants.phoneNumber, value: newValue) }
     }
 
+    /// SECURITY (VAPT F-15, CWE-311): name and email are PII and used to live in
+    /// `UserDefaults` — an unencrypted plist inside the app container that is included in
+    /// unencrypted iTunes/Finder backups and readable on a jailbroken device. They belong
+    /// in the Keychain alongside the other identity fields.
+    ///
+    /// `migrateLegacyPlaintextPII()` moves values written by earlier builds and deletes the
+    /// plaintext copies, so upgrading installs do not leave the old values on disk.
+    public var name: String? {
+        get { keychainRead(AppConstants.userName) }
+        set { keychainWrite(AppConstants.userName, value: newValue) }
+    }
+
+    public var email: String? {
+        get { keychainRead(AppConstants.userEmail) }
+        set { keychainWrite(AppConstants.userEmail, value: newValue) }
+    }
+
     // MARK: - Non-sensitive (UserDefaults)
 
     public var vihSettings: String? {
@@ -45,16 +64,6 @@ public final class Prefs {
     public var hashcode: String? {
         get { defaults.string(forKey: AppConstants.hashcodeExtra) }
         set { defaults.set(newValue, forKey: AppConstants.hashcodeExtra) }
-    }
-
-    public var name: String? {
-        get { defaults.string(forKey: "USER_NAME") }
-        set { defaults.set(newValue, forKey: "USER_NAME") }
-    }
-
-    public var email: String? {
-        get { defaults.string(forKey: "USER_EMAIL") }
-        set { defaults.set(newValue, forKey: "USER_EMAIL") }
     }
 
     public var userProfileUrl: String? {
@@ -140,7 +149,30 @@ public final class Prefs {
         keychainWrite(AppConstants.refreshAccessToken, value: nil)
         keychainWrite(AppConstants.userProfileSharedPref, value: nil)
         keychainWrite(AppConstants.phoneNumber, value: nil)
+        keychainWrite(AppConstants.userName, value: nil)
+        keychainWrite(AppConstants.userEmail, value: nil)
         // Keep DEVICE_ID and FCM_TOKEN — they belong to the install, not the user.
+    }
+
+    /// Moves name/email written by pre-F-15 builds out of `UserDefaults` and into the
+    /// Keychain, then removes the plaintext copies.
+    ///
+    /// Without this an upgrading install keeps its PII sitting in the unencrypted plist
+    /// forever — the new accessors would simply never read it. Runs once at init; the
+    /// `defaults` lookup is cheap and returns nil on every subsequent launch.
+    private func migrateLegacyPlaintextPII() {
+        if let legacyName = defaults.string(forKey: "USER_NAME"), !legacyName.isEmpty {
+            if keychainRead(AppConstants.userName) == nil {
+                keychainWrite(AppConstants.userName, value: legacyName)
+            }
+            defaults.removeObject(forKey: "USER_NAME")
+        }
+        if let legacyEmail = defaults.string(forKey: "USER_EMAIL"), !legacyEmail.isEmpty {
+            if keychainRead(AppConstants.userEmail) == nil {
+                keychainWrite(AppConstants.userEmail, value: legacyEmail)
+            }
+            defaults.removeObject(forKey: "USER_EMAIL")
+        }
     }
 
     // MARK: - Keychain primitives

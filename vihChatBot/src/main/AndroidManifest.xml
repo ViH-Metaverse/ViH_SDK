@@ -39,6 +39,8 @@
 
     <application
         android:name=".AppController"
+        android:networkSecurityConfig="@xml/vih_network_security_config"
+        android:usesCleartextTraffic="false"
         android:theme="@style/Theme.VihChatbot">
 
         <activity

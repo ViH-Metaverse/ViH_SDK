@@ -56,11 +56,25 @@ public struct EnterPriseModel: Codable {
     public var updated_at: String?
     public var displayNameModel: DisplayNameModel?
 
+    // Per-enterprise state flags computed server-side against the user's active channel.
+    // Backend sends them nullable; treat nil as false. (Mirror Android EnterPriseModel.)
+    public var isBlacklistedByChannel: Bool?
+    public var isBlacklistedByUser: Bool?
+    public var isMutedByUser: Bool?
+    // promotionalOptIn and isPromotionalMessageBlocked are INVERSE: optIn=true => not blocked.
+    public var isPromotionalMessageBlocked: Bool?
+    public var promotionalOptIn: Bool?
+
     enum CodingKeys: String, CodingKey {
         case id, comp_name, comp_address, email, comp_website, customercare,
              phone, user_id, category, industry, profile_picture, display_img,
              created_at, updated_at
         case displayNameModel = "raw_cpaas_json"
+        case isBlacklistedByChannel = "is_blacklisted_by_channel"
+        case isBlacklistedByUser = "is_blacklisted_by_user"
+        case isMutedByUser = "is_muted_by_user"
+        case isPromotionalMessageBlocked = "is_promotional_message_blocked"
+        case promotionalOptIn = "promotional_opt_in"
     }
 
     /// Extra wire keys used only as fallbacks for the channel's display name.
@@ -102,6 +116,15 @@ public struct EnterPriseModel: Codable {
         display_img = optString(.display_img)
         created_at = optString(.created_at)
         updated_at = optString(.updated_at)
+
+        func optBool(_ key: CodingKeys) -> Bool? {
+            (try? c.decodeIfPresent(Bool.self, forKey: key)) ?? nil
+        }
+        isBlacklistedByChannel = optBool(.isBlacklistedByChannel)
+        isBlacklistedByUser = optBool(.isBlacklistedByUser)
+        isMutedByUser = optBool(.isMutedByUser)
+        isPromotionalMessageBlocked = optBool(.isPromotionalMessageBlocked)
+        promotionalOptIn = optBool(.promotionalOptIn)
 
         // Channel display name: prefer raw_cpaas_json.display_name, then the
         // top-level display_name / enterprise_display_name the backend sends.

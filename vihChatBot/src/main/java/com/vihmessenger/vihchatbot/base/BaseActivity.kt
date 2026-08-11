@@ -6,7 +6,7 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.LayoutInflater
 import android.view.View
 import android.view.WindowInsetsController
@@ -25,6 +25,7 @@ import com.vihmessenger.vihchatbot.data.services.BaseViewModelFactory
 import com.vihmessenger.vihchatbot.utils.DynamicThemeManager
 import com.vihmessenger.vihchatbot.utils.ImagePickerUtil
 import com.vihmessenger.vihchatbot.utils.PermissionRequestCodes
+import com.vihmessenger.vihchatbot.utils.ScreenCapturePolicy
 
 
 abstract class BaseActivity : AppCompatActivity(), DynamicThemeManager.ThemeChangeListener {
@@ -86,6 +87,9 @@ abstract class BaseActivity : AppCompatActivity(), DynamicThemeManager.ThemeChan
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // SECURITY (VAPT F-09): must run before the window is first drawn — FLAG_SECURE is
+        // not applied retroactively to frames already rendered.
+        ScreenCapturePolicy.apply(this)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
 //        DynamicThemeManager.registerListener(this) // Register for theme changes
 
@@ -256,9 +260,9 @@ abstract class BaseActivity : AppCompatActivity(), DynamicThemeManager.ThemeChan
         val newActualColorHex = String.format("#%06X", (0xFFFFFF and newActualColor))
 
         if (newActualColor != color) {
-            Log.e("StatusBarSetAttempt", "Activity: ${javaClass.simpleName} - FAILED to change statusBarColor. Expected $targetColorHex, but it's now $newActualColorHex.")
+            VihLog.e("StatusBarSetAttempt", "Activity: ${javaClass.simpleName} - FAILED to change statusBarColor. Expected $targetColorHex, but it's now $newActualColorHex.")
         } else {
-            Log.d("StatusBarSetAttempt", "Activity: ${javaClass.simpleName} - SUCCESSFULLY set statusBarColor to $newActualColorHex.")
+            VihLog.d("StatusBarSetAttempt", "Activity: ${javaClass.simpleName} - SUCCESSFULLY set statusBarColor to $newActualColorHex.")
         }
 
         val isColorEffectivelyLight = isColorLight(newActualColor)
@@ -279,7 +283,7 @@ abstract class BaseActivity : AppCompatActivity(), DynamicThemeManager.ThemeChan
                                 WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
                             )
                         }
-                    } ?: Log.w("StatusBarIconDebug", "API R+: InsetsController was null even after check.")
+                    } ?: VihLog.w("StatusBarIconDebug", "API R+: InsetsController was null even after check.")
                 } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     @Suppress("DEPRECATION")
                     val decorView = window.decorView
@@ -292,11 +296,11 @@ abstract class BaseActivity : AppCompatActivity(), DynamicThemeManager.ThemeChan
                     decorView.systemUiVisibility = flags
                 }
             } else {
-                Log.w("StatusBarIconDebug", "DecorView not ready or not attached. Deferred status bar icon appearance.")
+                VihLog.w("StatusBarIconDebug", "DecorView not ready or not attached. Deferred status bar icon appearance.")
             }
             statusBarColorSet = true
         } catch (e: Exception) {
-            Log.e(TAG, "Error setting status bar appearance: " + e.message, e)
+            VihLog.e(TAG, "Error setting status bar appearance: " + e.message, e)
         }
     }
 

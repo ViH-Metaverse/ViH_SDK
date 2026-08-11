@@ -1,7 +1,7 @@
 package com.vihmessenger.vihchatbot.viewmodel
 
 import BaseActivity
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import androidx.lifecycle.MutableLiveData
 import com.vihmessenger.vihchatbot.api.services.ApiClient
 import com.vihmessenger.vihchatbot.data.model.ChatListModelResponse
@@ -63,7 +63,7 @@ class HomeViewModel(baseActivity: BaseActivity?) : BaseViewModel() {
                     ).data
                 )
             } catch (e: Throwable) {
-                Log.d(TAG, "getSdkFeatures: $e")
+                VihLog.d(TAG, "getSdkFeatures: $e")
                 e.printStackTrace()
             }
         }

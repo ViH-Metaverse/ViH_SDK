@@ -4,10 +4,11 @@
     Removed overly broad path="." entries that exposed entire directory trees.
 -->
 <paths>
-    <!-- Public documents -->
-    <external-path
-        name="public_documents"
-        path="Documents/" />
+    <!-- SECURITY (VAPT F-21): the <external-path name="public_documents" path="Documents/">
+         entry that used to be here mapped shared external storage, which is world-readable
+         to any app holding storage permission — so a URI granted for one attachment pointed
+         into a directory the SDK does not own. The app-scoped directories cover every file
+         the SDK actually creates. -->
 
     <!-- App-specific movies -->
     <external-files-path

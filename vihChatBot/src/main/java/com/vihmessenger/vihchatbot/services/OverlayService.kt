@@ -12,7 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.provider.Settings
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -40,9 +40,9 @@ class OverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("OverlayService", "Service starting.")
+        VihLog.d("OverlayService", "Service starting.")
         if (intent == null) {
-            Log.e("OverlayService", "Service started with a null intent. Stopping.")
+            VihLog.e("OverlayService", "Service started with a null intent. Stopping.")
             stopSelf()
             return START_NOT_STICKY
         }
@@ -136,17 +136,17 @@ class OverlayService : Service() {
 
 
             windowManager.addView(overlayView, params)
-            Log.d("OverlayService", "Overlay view added successfully.")
+            VihLog.d("OverlayService", "Overlay view added successfully.")
 
         } catch (e: Exception) {
-            Log.e("OverlayService", "Error adding overlay view to window manager", e)
+            VihLog.e("OverlayService", "Error adding overlay view to window manager", e)
             stopSelf() // Stop service if we fail to show the view
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        Log.d("OverlayService", "Service is being destroyed.")
+        VihLog.d("OverlayService", "Service is being destroyed.")
         // Clean up the view when the service is stopped
         overlayView?.let {
             // Check if the view is still attached to the window before trying to remove it to prevent crashes.

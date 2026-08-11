@@ -44,14 +44,36 @@ data class SdkFeatureModel(
     @SerializedName("consent_to_process_data") var consent_to_process_data: Boolean,
     @SerializedName("consent_to_communicate") var consent_to_communicate: Boolean,
     @SerializedName("collect_feedback_from_new_users") var collect_feedback_from_new_users: Boolean,
-    @SerializedName("user") var user: Int
+    @SerializedName("user") var user: Int,
+    // Present (non-null) only when this channel has an ACTIVE voice-bot agent. The toggle
+    // `vih_features.is_voice_bot` can be on while the agent is still pending/failed, in which
+    // case this stays null and there is nothing to call — always gate the call UI on this.
+    @SerializedName("voice_bot") var voice_bot: VoiceBot? = null
 )
+
+/**
+ * Live voice-bot descriptor for a channel. Arrives inside the SDK-features payload; the
+ * app connects a raw PCM WebSocket call to [wsUrl] and identifies the agent with [botKey].
+ */
+data class VoiceBot(
+    @SerializedName("ws_url") val wsUrl: String? = null,
+    @SerializedName("bot_key") val botKey: String? = null,
+    @SerializedName("language") val language: String? = null,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("default_customer_name") val defaultCustomerName: String? = null,
+) {
+    /** Callable only when both the socket URL and the agent id are present. */
+    val isCallable: Boolean get() = !wsUrl.isNullOrBlank() && !botKey.isNullOrBlank()
+}
 
 data class SdkVihFeatureModel(
     @SerializedName("id") var id: Int,
     @SerializedName("created_at") var created_at: String,
     @SerializedName("updated_at") var updated_at: String,
     @SerializedName("is_nlp") var is_nlp: Boolean,
+    // Feature toggle only. The agent may still be pending/failed even when this is true —
+    // gate the call UI on SdkFeatureModel.voice_bot != null, never on this flag.
+    @SerializedName("is_voice_bot") var is_voice_bot: Boolean = false,
     @SerializedName("is_contextual_search") var is_contextual_search: Boolean = false,
     @SerializedName("is_live_agent") var is_live_agent: Boolean = false,
     @SerializedName("is_otp_message") var is_otp_message: Boolean = false,

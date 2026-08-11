@@ -104,6 +104,7 @@ class FloatingButtonView @JvmOverloads constructor(
                 // Reset stale session state if this is a switch to a different channel.
                 prefs.switchChannel(hashcode)
                 prefs.isSDK = true
+                prefs.isHostDriven = false
             }
 
             name?.let { prefs.name = it }
@@ -502,6 +503,7 @@ class FloatingButtonView @JvmOverloads constructor(
                         // Reset stale session state if this is a switch to a different channel.
                         prefs.switchChannel(extraValue!!)
                         prefs.isSDK = true
+                        prefs.isHostDriven = false
                     }
                 }
             }
@@ -577,6 +579,7 @@ class FloatingButtonView @JvmOverloads constructor(
             // Reset stale session state if this is a switch to a different channel.
             prefs.switchChannel(hashcode)
             prefs.isSDK = true
+            prefs.isHostDriven = false
         }
     }
 }

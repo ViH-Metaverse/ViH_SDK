@@ -2,7 +2,7 @@ package com.vihmessenger.vihchatbot.adapters
 
 import android.content.Context
 import android.media.MediaPlayer
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.widget.ImageView
 import android.widget.TextView
 import com.masoudss.lib.SeekBarOnProgressChanged
@@ -87,7 +87,7 @@ class AudioPlayerManager(private val context: Context) {
                         waveformSeekBar?.progress = 0f
                         textView.text = formatDuration(0)
                     } else {
-                        Log.w(
+                        VihLog.w(
                             "AudioPlayerManager",
                             "Playback Completed but scope was inactive for $currentAudioPath"
                         )
@@ -128,7 +128,7 @@ class AudioPlayerManager(private val context: Context) {
                         mediaPlayer?.seekTo(progress.toInt())
                         durationTextView?.text = formatDuration(progress.toInt())
                     } catch (e: IllegalStateException) {
-                        Log.e("AudioPlayerManager", "IllegalStateException during seekTo", e)
+                        VihLog.e("AudioPlayerManager", "IllegalStateException during seekTo", e)
                     }
                 }
             }
@@ -144,11 +144,11 @@ class AudioPlayerManager(private val context: Context) {
     fun togglePlayPause(playIconRes: Int, pauseIconRes: Int) {
         val player = mediaPlayer
         if (player == null) {
-            Log.w("AudioPlayerManager", "togglePlayPause called but MediaPlayer is null.")
+            VihLog.w("AudioPlayerManager", "togglePlayPause called but MediaPlayer is null.")
             return
         }
         if (!isPrepared) {
-            Log.w(
+            VihLog.w(
                 "AudioPlayerManager",
                 "togglePlayPause called before prepared for $currentAudioPath"
             )
@@ -204,7 +204,7 @@ class AudioPlayerManager(private val context: Context) {
                         durationTextView?.text = formatDuration(currentPos)
                     } else {
                         if (!prepared || currentPos == -1) {
-                            Log.w(
+                            VihLog.w(
                                 "SeekBarUpdate",
                                 "Not updating: Prepared=$prepared, Playing=$playing, Pos=$currentPos. Coroutine active: $isActive"
                             )

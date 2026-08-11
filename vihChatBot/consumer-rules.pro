@@ -31,6 +31,10 @@
 -keep interface com.vihmessenger.vihchatbot.data.services.BaseApiService { *; }
 
 # Public SDK entry points consumed by host apps
+# VihDiscover is the custom/headless Discover facade. Without this rule a consumer
+# building with minifyEnabled true loses it and fails at runtime with NoSuchMethodError.
+-keep class com.vihmessenger.vihchatbot.discover.VihDiscover { public *; }
+-keep class com.vihmessenger.vihchatbot.discover.VihDiscover$* { public *; }
 -keep class com.vihmessenger.vihchatbot.utils.FloatingButtonView { public *; }
 -keep class com.vihmessenger.vihchatbot.AppController { public *; }
 -keep class com.vihmessenger.vihchatbot.constants.AppConstants { public *; }
@@ -52,3 +56,19 @@
 -dontwarn aws.smithy.kotlin.runtime.http.engine.okhttp4.OkHttp4Engine
 -dontwarn aws.smithy.kotlin.runtime.**
 -dontwarn com.amplifyframework.**
+
+# ── SECURITY (VAPT F-06, CWE-532) ───────────────────────────────────────
+# Strip every android.util.Log call from the consuming app's release build.
+# This is belt-and-braces behind VihLog's BuildConfig.DEBUG gate: it also catches
+# call sites that bypass the wrapper and any logging inside kept library code.
+# -assumenosideeffects only takes effect when R8 optimisation is enabled, which is
+# the default for release builds.
+-assumenosideeffects class android.util.Log {
+    public static int v(...);
+    public static int d(...);
+    public static int i(...);
+    public static int w(...);
+    public static int e(...);
+    public static int wtf(...);
+    public static java.lang.String getStackTraceString(java.lang.Throwable);
+}

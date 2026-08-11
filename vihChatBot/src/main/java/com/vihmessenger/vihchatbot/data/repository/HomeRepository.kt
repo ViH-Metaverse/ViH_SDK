@@ -3,6 +3,7 @@ package com.vihmessenger.vihchatbot.data.repository
 import BaseActivity
 import com.vihmessenger.vihchatbot.data.model.EmailLoginRequest
 import com.vihmessenger.vihchatbot.data.model.EmailLoginResponse
+import com.vihmessenger.vihchatbot.data.model.GenericStatusResponse
 import com.vihmessenger.vihchatbot.data.model.SubscribeChannelRequest
 import com.vihmessenger.vihchatbot.data.model.SubscribeChannelResponse
 import com.vihmessenger.vihchatbot.data.model.LogoutDataModel
@@ -113,5 +114,36 @@ class HomeRepository(
         return doSafeAPIRequest(
             call = { apiService.userLogout(refresh_token) }, showBlockingLoader = showBlockingLoader
         ) ?: throw NoConnectionException("Failed to create user profile")
+    }
+
+    /** Block/unblock this enterprise for the current user. */
+    suspend fun blacklistEnterprise(
+        showBlockingLoader: Boolean, enterprisePk: Int, blacklist: Boolean
+    ): GenericStatusResponse {
+        return doSafeAPIRequest(
+            call = { apiService.blacklistEnterprise(enterprisePk, blacklist.toString()) },
+            showBlockingLoader = showBlockingLoader
+        ) ?: throw NoConnectionException("Failed to update block state")
+    }
+
+    /** Mute/unmute this enterprise for the current (user, channel). */
+    suspend fun muteEnterprise(
+        showBlockingLoader: Boolean, enterpriseId: Int, muteStatus: Boolean
+    ): GenericStatusResponse {
+        return doSafeAPIRequest(
+            call = { apiService.muteEnterprise(enterpriseId, muteStatus) },
+            showBlockingLoader = showBlockingLoader
+        ) ?: throw NoConnectionException("Failed to update mute state")
+    }
+
+    /** Set promotional opt-in for this (user, channel, enterprise). optIn is the inverse
+     *  of the is_promotional_message_blocked read flag. */
+    suspend fun updateEnterprisePromotional(
+        showBlockingLoader: Boolean, optIn: Boolean, enterpriseId: Int, channelId: String
+    ): GenericStatusResponse {
+        return doSafeAPIRequest(
+            call = { apiService.updateEnterprisePromotional(optIn, enterpriseId, channelId) },
+            showBlockingLoader = showBlockingLoader
+        ) ?: throw NoConnectionException("Failed to update promotional preference")
     }
 }

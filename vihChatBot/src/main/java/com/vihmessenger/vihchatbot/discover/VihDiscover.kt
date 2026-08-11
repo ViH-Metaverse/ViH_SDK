@@ -102,30 +102,40 @@ object VihDiscover {
         val appContext = context.applicationContext
         scope.launch {
             try {
-                val prefs = Prefs.getInstance(appContext)
-                // Reset stale session state if this is a switch to a different channel, then
-                // mark SDK mode and remember the phone — mirrors FloatingButtonView.startSdk.
-                prefs.switchChannel(hashcode)
-                prefs.isSDK = true
-                prefs.phoneNumber = phone
-
-                // prepareSession performs a *fresh* sign-in, so the login request must go out
-                // unauthenticated. On the same channel switchChannel keeps the old session; if
-                // that token is expired, AuthInterceptor would attach it to signup-login and the
-                // server rejects it with 401 token_not_valid. Drop it first.
-                prefs.accessToken = null
-                prefs.refreshToken = null
-
+                // Prefs is backed by EncryptedSharedPreferences, whose first construction goes
+                // through the Android Keystore. That is slow enough to stutter — and on some
+                // emulator images slow enough to stall — so it must not run on the main
+                // thread, which is where this coroutine's scope dispatches.
                 val response = withContext(Dispatchers.IO) {
+                    val prefs = Prefs.getInstance(appContext)
+                    // Reset stale session state if this is a switch to a different channel, then
+                    // mark SDK mode and remember the phone — mirrors FloatingButtonView.startSdk.
+                    prefs.switchChannel(hashcode)
+                    prefs.isSDK = true
+                    // The host renders its own Discover UI and owns navigation, so an
+                    // unrecoverable expiry must not relaunch it. See BaseRepository.
+                    prefs.isHostDriven = true
+                    prefs.phoneNumber = phone
+
+                    // prepareSession performs a *fresh* sign-in, so the login request must go out
+                    // unauthenticated. On the same channel switchChannel keeps the old session; if
+                    // that token is expired, AuthInterceptor would attach it to signup-login and the
+                    // server rejects it with 401 token_not_valid. Drop it first.
+                    prefs.accessToken = null
+                    prefs.refreshToken = null
+
                     ApiClient.apiService.createUserProfile(
                         UserProfileRequest(phone, hashcode, prefs.fcmToken ?: "")
                     )
                 }
                 val body = response.body()
                 if (response.isSuccessful && body != null && body.status) {
-                    prefs.userProfile = gson.toJson(body.data.user)
-                    prefs.accessToken = body.data.access_token
-                    prefs.refreshToken = body.data.refresh
+                    withContext(Dispatchers.IO) {
+                        val prefs = Prefs.getInstance(appContext)
+                        prefs.userProfile = gson.toJson(body.data.user)
+                        prefs.accessToken = body.data.access_token
+                        prefs.refreshToken = body.data.refresh
+                    }
                     callback?.onSuccess(Unit)
                 } else {
                     val msg = body?.message?.takeIf { it.isNotBlank() }
@@ -232,6 +242,8 @@ object VihDiscover {
                     setClassName(context, DASHBOARD_ACTIVITY)
                     putExtra(AppConstants.HASHCODE_EXTRA, hashcode)
                     putExtra(AppConstants.PHONENUMBER, phone)
+                    // See ChatActivity.startIntent — a non-Activity context needs NEW_TASK.
+                    if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
             )
         }

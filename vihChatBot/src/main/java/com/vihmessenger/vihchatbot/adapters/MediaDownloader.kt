@@ -1,7 +1,7 @@
 package com.vihmessenger.vihchatbot.adapters
 
 import android.content.Context
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -28,7 +28,7 @@ class MediaDownloader(private val context: Context) {
     ) {
         try {
             if (destinationFile.exists() && destinationFile.length() > 0) {
-                Log.i(
+                VihLog.i(
                     TAG_DOWNLOADER,
                     "[File: ${destinationFile.name}] File already exists and has size > 0 at ${destinationFile.absolutePath}. Skipping download."
                 )
@@ -37,14 +37,14 @@ class MediaDownloader(private val context: Context) {
                 }
                 return
             } else if (destinationFile.exists() && destinationFile.length() == 0L) {
-                Log.w(
+                VihLog.w(
                     TAG_DOWNLOADER,
                     "[File: ${destinationFile.name}] File exists but is empty at ${destinationFile.absolutePath}. Attempting to delete and re-download."
                 )
                 destinationFile.delete()
             }
         } catch (e: Exception) {
-            Log.e(
+            VihLog.e(
                 TAG_DOWNLOADER,
                 "[File: ${destinationFile.name}] Error checking existing destination file: ${e.message}",
                 e
@@ -58,7 +58,7 @@ class MediaDownloader(private val context: Context) {
         var input: InputStream? = null
         var output: OutputStream? = null
 
-        Log.d(
+        VihLog.d(
             TAG_DOWNLOADER,
             "[File: ${destinationFile.name}] Initializing download. Temp file: ${tempFile.absolutePath}"
         )
@@ -66,12 +66,12 @@ class MediaDownloader(private val context: Context) {
         try {
             if (tempFile.exists()) {
                 if (tempFile.delete()) {
-                    Log.d(
+                    VihLog.d(
                         TAG_DOWNLOADER,
                         "[File: ${destinationFile.name}] Deleted existing temp file: ${tempFile.absolutePath}"
                     )
                 } else {
-                    Log.w(
+                    VihLog.w(
                         TAG_DOWNLOADER,
                         "[File: ${destinationFile.name}] Failed to delete existing temp file: ${tempFile.absolutePath}"
                     )
@@ -80,7 +80,7 @@ class MediaDownloader(private val context: Context) {
 
             val parentDir = destinationFile.parentFile
             if (parentDir != null && !parentDir.exists()) {
-                Log.d(
+                VihLog.d(
                     TAG_DOWNLOADER,
                     "[File: ${destinationFile.name}] Destination directory ${parentDir.absolutePath} does not exist. Creating."
                 )
@@ -92,11 +92,11 @@ class MediaDownloader(private val context: Context) {
             connection = url.openConnection() as HttpURLConnection
             connection.connectTimeout = 15000
             connection.readTimeout = 15000
-            Log.d(
+            VihLog.d(
                 TAG_DOWNLOADER,
                 "[File: ${destinationFile.name}] Attempting to download from URL: $fileUrl"
             )
-            Log.d(
+            VihLog.d(
                 TAG_DOWNLOADER,
                 "[File: ${destinationFile.name}] Attempting to save to temp file: ${tempFile.absolutePath}"
             )
@@ -121,12 +121,12 @@ class MediaDownloader(private val context: Context) {
             val buffer = ByteArray(4096)
             var bytesRead: Int
 
-            Log.d(TAG_DOWNLOADER, "[File: ${destinationFile.name}] Starting download from $fileUrl")
+            VihLog.d(TAG_DOWNLOADER, "[File: ${destinationFile.name}] Starting download from $fileUrl")
 
             while (input.read(buffer).also { bytesRead = it } != -1) {
                 if (!currentCoroutineContext().isActive) {
                     isCancelled = true
-                    Log.w(
+                    VihLog.w(
                         TAG_DOWNLOADER,
                         "[File: ${destinationFile.name}] Cancellation detected in download loop."
                     )
@@ -140,7 +140,7 @@ class MediaDownloader(private val context: Context) {
                 }
             }
             output.flush()
-            Log.d(
+            VihLog.d(
                 TAG_DOWNLOADER,
                 "[File: ${destinationFile.name}] Download loop completed. Downloaded $downloadedBytes bytes."
             )
@@ -148,12 +148,12 @@ class MediaDownloader(private val context: Context) {
             try {
                 output.close()
                 output = null
-                Log.d(
+                VihLog.d(
                     TAG_DOWNLOADER,
                     "[File: ${destinationFile.name}] Temp file output stream closed."
                 )
             } catch (e: IOException) {
-                Log.e(
+                VihLog.e(
                     TAG_DOWNLOADER,
                     "[File: ${destinationFile.name}] Error closing temp file output stream: ${e.message}",
                     e
@@ -163,12 +163,12 @@ class MediaDownloader(private val context: Context) {
             try {
                 input.close()
                 input = null
-                Log.d(
+                VihLog.d(
                     TAG_DOWNLOADER,
                     "[File: ${destinationFile.name}] Network input stream closed."
                 )
             } catch (e: IOException) {
-                Log.e(
+                VihLog.e(
                     TAG_DOWNLOADER,
                     "[File: ${destinationFile.name}] Error closing network input stream: ${e.message}",
                     e
@@ -177,22 +177,22 @@ class MediaDownloader(private val context: Context) {
 
             if (fileLength <= 0 || downloadedBytes == fileLength.toLong()) {
                 if (downloadedBytes > 0) {
-                    Log.d(
+                    VihLog.d(
                         TAG_DOWNLOADER,
                         "[File: ${destinationFile.name}] Download appears complete. Proceeding with file finalization."
                     )
                     if (destinationFile.exists()) {
-                        Log.w(
+                        VihLog.w(
                             TAG_DOWNLOADER,
                             "[File: ${destinationFile.name}] Destination file ${destinationFile.absolutePath} unexpectedly exists before rename. Attempting to delete."
                         )
                         if (!destinationFile.delete()) {
-                            Log.e(
+                            VihLog.e(
                                 TAG_DOWNLOADER,
                                 "[File: ${destinationFile.name}] Failed to delete unexpectedly existing destination file. Rename/copy will likely fail if it cannot overwrite."
                             )
                         } else {
-                            Log.d(
+                            VihLog.d(
                                 TAG_DOWNLOADER,
                                 "[File: ${destinationFile.name}] Successfully deleted unexpectedly existing destination file."
                             )
@@ -201,30 +201,30 @@ class MediaDownloader(private val context: Context) {
 
                     if (tempFile.renameTo(destinationFile)) {
                         successful = true
-                        Log.i(
+                        VihLog.i(
                             TAG_DOWNLOADER,
                             "[File: ${destinationFile.name}] Successfully renamed temp file to ${destinationFile.absolutePath}"
                         )
                     } else {
-                        Log.w(
+                        VihLog.w(
                             TAG_DOWNLOADER,
                             "[File: ${destinationFile.name}] Failed to rename temp file to ${destinationFile.absolutePath}. Attempting copy fallback."
                         )
                         try {
                             tempFile.copyTo(destinationFile, overwrite = true)
                             successful = true
-                            Log.i(
+                            VihLog.i(
                                 TAG_DOWNLOADER,
                                 "[File: ${destinationFile.name}] Successfully copied temp file to ${destinationFile.absolutePath} (fallback)."
                             )
                             if (!tempFile.delete()) {
-                                Log.w(
+                                VihLog.w(
                                     TAG_DOWNLOADER,
                                     "[File: ${destinationFile.name}] Failed to delete temp file after successful copy fallback."
                                 )
                             }
                         } catch (copyEx: Exception) {
-                            Log.e(
+                            VihLog.e(
                                 TAG_DOWNLOADER,
                                 "[File: ${destinationFile.name}] Fallback copy also failed: ${copyEx.message}",
                                 copyEx
@@ -247,21 +247,21 @@ class MediaDownloader(private val context: Context) {
         } catch (e: CancellationException) {
             isCancelled = true
             successful = false
-            Log.w(
+            VihLog.w(
                 TAG_DOWNLOADER,
                 "[File: ${destinationFile.name}] Download cancelled: ${e.message}",
                 e
             )
         } catch (e: IOException) {
             successful = false
-            Log.e(
+            VihLog.e(
                 TAG_DOWNLOADER,
                 "[File: ${destinationFile.name}] IOException during download: ${e.message}",
                 e
             )
         } catch (e: Exception) {
             successful = false
-            Log.e(
+            VihLog.e(
                 TAG_DOWNLOADER,
                 "[File: ${destinationFile.name}] Generic error during download. Type: ${e::class.java.simpleName}: ${e.message}",
                 e
@@ -270,7 +270,7 @@ class MediaDownloader(private val context: Context) {
             try {
                 output?.close()
             } catch (e: IOException) {
-                Log.e(
+                VihLog.e(
                     TAG_DOWNLOADER,
                     "[File: ${destinationFile.name}] Error closing output stream in finally: ${e.message}"
                 )
@@ -278,25 +278,25 @@ class MediaDownloader(private val context: Context) {
             try {
                 input?.close()
             } catch (e: IOException) {
-                Log.e(
+                VihLog.e(
                     TAG_DOWNLOADER,
                     "[File: ${destinationFile.name}] Error closing input stream in finally: ${e.message}"
                 )
             }
             connection?.disconnect()
-            Log.d(
+            VihLog.d(
                 TAG_DOWNLOADER,
                 "[File: ${destinationFile.name}] Connection disconnected in finally block."
             )
 
             if (isCancelled || !successful) {
                 if (tempFile.exists()) {
-                    Log.d(
+                    VihLog.d(
                         TAG_DOWNLOADER,
                         "[File: ${destinationFile.name}] Download not successful or cancelled. Deleting temp file: ${tempFile.absolutePath}"
                     )
                     if (!tempFile.delete()) {
-                        Log.w(
+                        VihLog.w(
                             TAG_DOWNLOADER,
                             "[File: ${destinationFile.name}] Failed to delete temp file in finally block: ${tempFile.absolutePath}"
                         )
@@ -304,20 +304,20 @@ class MediaDownloader(private val context: Context) {
                 }
             }
 
-            Log.d(
+            VihLog.d(
                 TAG_DOWNLOADER,
                 "[File: ${destinationFile.name}] In finally block. isCancelled: $isCancelled, successful: $successful. Calling onComplete."
             )
             withContext(NonCancellable) {
                 withContext(Dispatchers.Main) {
-                    Log.d(
+                    VihLog.d(
                         TAG_DOWNLOADER,
                         "[File: ${destinationFile.name}] Switched to Main (NonCancellable) for onComplete. Success: $successful, Cancelled: $isCancelled, File: ${if (successful) destinationFile.name else null}"
                     )
                     onComplete(successful, if (successful) destinationFile else null, isCancelled)
                 }
             }
-            Log.d(
+            VihLog.d(
                 TAG_DOWNLOADER,
                 "[File: ${destinationFile.name}] After onComplete call from finally block."
             )

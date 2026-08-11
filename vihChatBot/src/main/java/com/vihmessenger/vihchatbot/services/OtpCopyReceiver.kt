@@ -6,8 +6,9 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.widget.Toast
+import com.vihmessenger.vihchatbot.utils.SecureClipboard
 
 class OtpCopyReceiver : BroadcastReceiver() {
     companion object {
@@ -18,52 +19,48 @@ class OtpCopyReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         // Preliminary checks
         if (context == null) {
-            Log.e("OtpCopyReceiver", "Context is null in onReceive.")
+            VihLog.e("OtpCopyReceiver", "Context is null in onReceive.")
             return
         }
         if (intent == null) {
-            Log.e("OtpCopyReceiver", "Intent is null in onReceive.")
+            VihLog.e("OtpCopyReceiver", "Intent is null in onReceive.")
             return
         }
 
-        Log.d("OtpCopyReceiver", "onReceive triggered. Action: ${intent.action}")
+        VihLog.d("OtpCopyReceiver", "onReceive triggered. Action: ${intent.action}")
 
         if (intent.action == ACTION_COPY_OTP) {
             val otpToCopy = intent.getStringExtra(EXTRA_OTP)
             val notificationIdToCancel = intent.getIntExtra("notification_id_for_otp_copy", -1)
 
-            Log.d("OtpCopyReceiver", "Processing ACTION_COPY_OTP. OTP from intent: '$otpToCopy', Notification ID: $notificationIdToCancel")
+            VihLog.d("OtpCopyReceiver", "Processing ACTION_COPY_OTP. OTP=${VihLog.redact(otpToCopy)}, Notification ID: $notificationIdToCancel")
 
             if (!otpToCopy.isNullOrBlank()) {
                 try {
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("OTP", otpToCopy) // Label "OTP", text is otpToCopy
-                    clipboard.setPrimaryClip(clip)
-
-                    // Verify if clipboard has the text (optional, for debugging)
-                    if (clipboard.hasPrimaryClip() && clipboard.primaryClip?.getItemAt(0)?.text == otpToCopy) {
-                        Log.d("OtpCopyReceiver", "OTP '$otpToCopy' successfully set to primary clip.")
-                        Toast.makeText(context, "OTP '$otpToCopy' copied!", Toast.LENGTH_SHORT).show()
+                    // SECURITY (VAPT F-08): sensitive, self-expiring clip — not a bare setPrimaryClip.
+                    if (SecureClipboard.copySensitive(context, "OTP", otpToCopy)) {
+                        VihLog.d("OtpCopyReceiver", "OTP ${VihLog.redact(otpToCopy)} set to primary clip.")
+                        Toast.makeText(context, "OTP copied", Toast.LENGTH_SHORT).show()
                     } else {
-                        Log.e("OtpCopyReceiver", "Failed to verify OTP in clipboard after setPrimaryClip. OTP was: '$otpToCopy'")
+                        VihLog.e("OtpCopyReceiver", "Failed to set OTP on the clipboard.")
                         Toast.makeText(context, "Failed to copy OTP.", Toast.LENGTH_SHORT).show()
                     }
 
                     if (notificationIdToCancel != -1) {
                         val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
                         notificationManager.cancel(notificationIdToCancel)
-                        Log.d("OtpCopyReceiver", "Cancelled notification ID: $notificationIdToCancel after OTP copy attempt.")
+                        VihLog.d("OtpCopyReceiver", "Cancelled notification ID: $notificationIdToCancel after OTP copy attempt.")
                     }
                 } catch (e: Exception) {
-                    Log.e("OtpCopyReceiver", "Error during clipboard operation or notification cancellation", e)
+                    VihLog.e("OtpCopyReceiver", "Error during clipboard operation or notification cancellation", e)
                     Toast.makeText(context, "Error copying OTP.", Toast.LENGTH_SHORT).show()
                 }
             } else {
-                Log.w("OtpCopyReceiver", "OTP to copy was null or blank in intent. Cannot copy.")
+                VihLog.w("OtpCopyReceiver", "OTP to copy was null or blank in intent. Cannot copy.")
                 Toast.makeText(context, "No OTP found to copy.", Toast.LENGTH_SHORT).show()
             }
         } else {
-            Log.w("OtpCopyReceiver", "Received intent with incorrect action: ${intent.action}")
+            VihLog.w("OtpCopyReceiver", "Received intent with incorrect action: ${intent.action}")
         }
     }
 }

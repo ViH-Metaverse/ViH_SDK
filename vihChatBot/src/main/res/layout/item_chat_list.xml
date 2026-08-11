@@ -52,7 +52,29 @@
             android:text="Airtel"
             android:textColor="@color/vih_text_secondary"
             android:textSize="@dimen/_10ssp" />
+
+        <TextView
+            android:id="@+id/tvBlocked"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/_2sdp"
+            android:fontFamily="@font/rubik_medium"
+            android:text="Blocked"
+            android:textColor="@color/vih_text_secondary"
+            android:textSize="@dimen/_8ssp"
+            android:visibility="gone" />
     </LinearLayout>
+
+    <ImageView
+        android:id="@+id/ivMuteIcon"
+        android:layout_width="@dimen/_12sdp"
+        android:layout_height="@dimen/_12sdp"
+        android:layout_marginEnd="@dimen/_4sdp"
+        android:src="@drawable/ic_mute"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@+id/tvLastChatDate"
+        app:layout_constraintEnd_toStartOf="@+id/tvLastChatDate"
+        app:layout_constraintTop_toTopOf="@+id/tvLastChatDate" />
 
     <TextView
         android:id="@+id/txtCountUnread"

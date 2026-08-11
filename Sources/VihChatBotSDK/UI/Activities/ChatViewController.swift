@@ -52,7 +52,15 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
     private let titleLabel = UILabel()
     private let avatarView = UIImageView()
     private let voicebotButton = UIButton(type: .system)
+
+    /// Callable voice-bot for the open channel, resolved from that channel's SDK-features.
+    /// Nil until fetched / when the channel has no active agent — gates the call button.
+    private var voiceBot: VoiceBot?
     private let inputBar = ChatInputBar()
+    /// Shown in place of [inputBar] when the user has blocked this enterprise. The backend
+    /// rejects such sends with 2003, so we hide the composer rather than let the send fail
+    /// silently. (Mirror Android's lyBlacklistedState.)
+    private let blockedBanner = UILabel()
     private let emptyLabel = UILabel()
     private let loadingIndicator = UIActivityIndicatorView(style: .medium)
 
@@ -125,6 +133,8 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
             guard let self = self, response.status else { return }
             self.inputs.channel = response.data
             self.updateEmptyVisibility()
+            // enterprise-details carries the fresh isBlacklistedByUser flag.
+            self.updateBlacklistState()
         })
 
         cancellables.append(viewModel.errorLiveData.observe { [weak self] _ in
@@ -183,7 +193,10 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
 
         voicebotButton.setImage(UIImage(systemName: "phone.circle.fill"), for: .normal)
         voicebotButton.addTarget(self, action: #selector(launchVoicebot), for: .touchUpInside)
+        // Hidden until we confirm this channel has an active, callable voice-bot.
+        voicebotButton.isHidden = true
         navigationItem.rightBarButtonItem = UIBarButtonItem(customView: voicebotButton)
+        resolveVoiceBot()
 
         let avatarTap = UITapGestureRecognizer(target: self, action: #selector(openCompanyProfile))
         stack.addGestureRecognizer(avatarTap)
@@ -239,6 +252,30 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
             inputBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             inputBarBottomConstraint
         ])
+
+        blockedBanner.translatesAutoresizingMaskIntoConstraints = false
+        blockedBanner.text = "You've blocked this business. Unblock it to send messages."
+        blockedBanner.font = .systemFont(ofSize: 13)
+        blockedBanner.textColor = .secondaryLabel
+        blockedBanner.textAlignment = .center
+        blockedBanner.numberOfLines = 0
+        blockedBanner.isHidden = true
+        view.addSubview(blockedBanner)
+        NSLayoutConstraint.activate([
+            blockedBanner.topAnchor.constraint(equalTo: inputBar.topAnchor),
+            blockedBanner.leadingAnchor.constraint(equalTo: inputBar.leadingAnchor, constant: 16),
+            blockedBanner.trailingAnchor.constraint(equalTo: inputBar.trailingAnchor, constant: -16),
+            blockedBanner.bottomAnchor.constraint(equalTo: inputBar.bottomAnchor)
+        ])
+        updateBlacklistState()
+    }
+
+    /// Hide the composer and show the blocked banner when the user has blocked this
+    /// enterprise. Safe before the channel loads — a nil flag reads as not-blocked.
+    private func updateBlacklistState() {
+        let blocked = inputs.channel?.isBlacklistedByUser == true
+        inputBar.isHidden = blocked
+        blockedBanner.isHidden = !blocked
     }
 
     // MARK: - Keyboard avoidance
@@ -314,6 +351,11 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
     private func send(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // Blocked enterprises reject sends server-side (2003); don't append a doomed message.
+        if inputs.channel?.isBlacklistedByUser == true {
+            updateBlacklistState()
+            return
+        }
         append(MessageModel(
             session_id: inputs.sessionId,
             message: trimmed,
@@ -381,11 +423,56 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
         navigationController?.pushViewController(vc, animated: true)
     }
 
+    /// Fetch SDK-features for the *open* channel and show the call button only when it has an
+    /// active, callable voice-bot. Fetched per-channel because the cached `prefs.vihSettings`
+    /// is scoped to the dashboard's default channel, which may differ from the one being viewed.
+    private func resolveVoiceBot() {
+        let hashcode = inputs.hashcode?.nonBlank ?? VihChatBotSDK.shared.prefs?.hashcode
+        guard let hashcode = hashcode, !hashcode.isEmpty else { return }
+        Task { [weak self] in
+            var vb: VoiceBot?
+            do {
+                let response = try await APIClient.shared.apiService.getSdkFeatures(hashCode: hashcode)
+                if let candidate = response.data.voice_bot, candidate.isCallable {
+                    vb = candidate
+                }
+            } catch {
+                // Non-critical: on failure we simply don't show the call button.
+                vb = nil
+            }
+            let resolved = vb
+            await MainActor.run {
+                guard let self = self else { return }
+                self.voiceBot = resolved
+                self.voicebotButton.isHidden = (resolved == nil)
+            }
+        }
+    }
+
     @objc private func launchVoicebot() {
-        guard !inputs.sessionId.isEmpty else { return }
-        let vc = VoicebotViewController(sessionId: inputs.sessionId)
+        guard let vb = voiceBot, vb.isCallable,
+              let wsUrl = vb.wsUrl, let botKey = vb.botKey else { return }
+        // Caller's first name, derived from the logged-in user's full_name ("Rahul Sharma" ->
+        // "Rahul"). Empty is acceptable — the agent copes without a name.
+        let firstName = Self.callerFirstName()
+        let vc = VoicebotViewController(
+            wsUrl: wsUrl,
+            botKey: botKey,
+            firstName: firstName,
+            agentName: vb.name ?? ""
+        )
         vc.modalPresentationStyle = .fullScreen
         present(vc, animated: true)
+    }
+
+    private static func callerFirstName() -> String {
+        guard let raw = VihChatBotSDK.shared.prefs?.userProfile,
+              let data = raw.data(using: .utf8),
+              let profile = try? JSONDecoder().decode(UserProfileModel.self, from: data),
+              let full = profile.full_name else { return "" }
+        return full.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0 == " " || $0 == "\t" })
+            .first.map(String.init) ?? ""
     }
 
     // MARK: - UITableViewDataSource

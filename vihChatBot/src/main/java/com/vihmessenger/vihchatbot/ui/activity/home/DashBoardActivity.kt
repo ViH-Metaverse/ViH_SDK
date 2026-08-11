@@ -9,7 +9,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
-import android.util.Log
+import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
@@ -46,7 +46,7 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
             WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or
                     WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
         )
-        Log.d(TAG, "onCreate: Intent Action: ${intent.action}, Extras: ${intent.extras}")
+        VihLog.d(TAG, "onCreate: Intent Action: ${intent.action}, Extras: ${intent.extras}")
         processIntentExtras(intent) // Process initial intent
 
         // --- FIX: Call permission checks directly in onCreate ---
@@ -56,22 +56,22 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        Log.d(TAG, "onNewIntent: Intent Action: ${intent?.action}, Extras: ${intent?.extras}")
+        VihLog.d(TAG, "onNewIntent: Intent Action: ${intent?.action}, Extras: ${intent?.extras}")
         setIntent(intent)
         processIntentExtras(intent)
 
         if (phoneNumber != null && hashCode != null) {
-            Log.d(TAG, "onNewIntent: Re-evaluating fragment setup.")
+            VihLog.d(TAG, "onNewIntent: Re-evaluating fragment setup.")
             initView()
         } else {
-            Log.e(TAG, "onNewIntent: Missing required extras in new intent. Finishing.")
+            VihLog.e(TAG, "onNewIntent: Missing required extras in new intent. Finishing.")
             finishActivityWithMessage("Error: Invalid shortcut data.")
         }
     }
 
     private fun processIntentExtras(intent: Intent?) {
         if (intent == null) {
-            Log.e(TAG, "processIntentExtras: Intent is null.")
+            VihLog.e(TAG, "processIntentExtras: Intent is null.")
             this.phoneNumber = null
             this.hashCode = null
             return
@@ -82,7 +82,7 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
         prefs.hashcode = this.hashCode
         prefs.phoneNumber = this.phoneNumber
 
-        Log.d(TAG, "processIntentExtras: Phone: ${this.phoneNumber}, Hash: ${this.hashCode}, Launched from shortcut: ${intent.getBooleanExtra("launched_from_shortcut", false)}")
+        VihLog.d(TAG, "processIntentExtras: Phone: ${VihLog.tail(this.phoneNumber)}, Hash: ${VihLog.tail(this.hashCode)}, Launched from shortcut: ${intent.getBooleanExtra("launched_from_shortcut", false)}")
     }
 
 
@@ -115,7 +115,7 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
                 startActivityForResult(intent, OVERLAY_PERMISSION_REQUEST_CODE)
             } else {
                 // Permission already granted
-                Log.d(TAG, "Overlay permission is already granted.")
+                VihLog.d(TAG, "Overlay permission is already granted.")
             }
         }
     }
@@ -127,11 +127,11 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
 
         FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
             if (!task.isSuccessful) {
-                Log.w(TAG, "Fetching FCM registration token failed", task.exception)
+                VihLog.w(TAG, "Fetching FCM registration token failed", task.exception)
                 return@addOnCompleteListener
             }
             val token = task.result
-            Log.d(TAG, "FCM Token: $token")
+            VihLog.d(TAG, "FCM Token: ${VihLog.redact(token)}")
         }
     }
 
@@ -141,10 +141,10 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == PermissionRequestCodes.NOTIFICATION_PERMISSION) {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                Log.d(TAG, "Notification permission granted.")
+                VihLog.d(TAG, "Notification permission granted.")
                 setupFirebaseMessaging()
             } else {
-                Log.w(TAG, "Notification permission denied.")
+                VihLog.w(TAG, "Notification permission denied.")
                 Toast.makeText(
                     this,
                     "Notification permission is recommended to receive important updates.",
@@ -162,7 +162,7 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
 
     override fun initView() {
         if (phoneNumber != null && hashCode != null) {
-            Log.d(TAG, "initView: Setting up DashboardFragment. Phone: $phoneNumber, Hash: $hashCode")
+            VihLog.d(TAG, "initView: Setting up DashboardFragment. Phone: ${VihLog.tail(phoneNumber)}, Hash: ${VihLog.tail(hashCode)}")
             var existingFragment = supportFragmentManager.findFragmentById(R.id.flDashboardMain) as? DashboardFragment
             if (existingFragment == null ||
                 existingFragment.arguments?.getString(AppConstants.PHONENUMBER) != phoneNumber ||
@@ -170,17 +170,17 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
 
                 mainFragment = DashboardFragment.getInstance(hashCode!!, phoneNumber!!)
                 mainFragment?.let {
-                    Log.d(TAG, "initView: Adding/Replacing DashboardFragment.")
+                    VihLog.d(TAG, "initView: Adding/Replacing DashboardFragment.")
                     supportFragmentManager.beginTransaction()
                         .replace(R.id.flDashboardMain, it)
                         .commitAllowingStateLoss()
                 }
             } else {
-                Log.d(TAG, "initView: DashboardFragment already exists with correct data.")
+                VihLog.d(TAG, "initView: DashboardFragment already exists with correct data.")
                 mainFragment = existingFragment
             }
         } else {
-            Log.e(TAG, "initView: phoneNumber or hashCode is null. Finishing activity.")
+            VihLog.e(TAG, "initView: phoneNumber or hashCode is null. Finishing activity.")
             finishActivityWithMessage("Required information is missing.")
         }
     }
@@ -247,10 +247,10 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
             // It's good practice to check again after the user returns from settings
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 if (Settings.canDrawOverlays(this)) {
-                    Log.d(TAG, "onActivityResult: Overlay permission has been granted.")
+                    VihLog.d(TAG, "onActivityResult: Overlay permission has been granted.")
                     Toast.makeText(this, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
                 } else {
-                    Log.w(TAG, "onActivityResult: Overlay permission was NOT granted.")
+                    VihLog.w(TAG, "onActivityResult: Overlay permission was NOT granted.")
                     Toast.makeText(this, "Overlay permission is needed for full functionality.", Toast.LENGTH_LONG).show()
                 }
             }

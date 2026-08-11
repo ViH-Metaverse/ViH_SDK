@@ -1,26 +1,33 @@
 import UIKit
 import AVFoundation
 
-/// Mirrors `ui/activity/VoicebotActivity.kt`. Flow:
-///   1. POST /main/loan-approval/ with `session_id` to mint an Ultravox call.
-///   2. Open the WebRTC voice channel via the Ultravox iOS SDK (placeholder
-///      hook here — wire `UltravoxSession` once the SwiftPM package is added).
-///   3. POST /main/call-details/ on hang-up or server disconnect (idempotent).
+/// Voice-bot call screen. Mirrors Android `ui/activity/VoicebotActivity.kt`.
 ///
-/// `AVAudioSession` replaces Android's `AudioManager` for speaker routing.
+/// Transport is a raw WebSocket (`URLSessionWebSocketTask`) carrying JSON control frames
+/// (text) and raw PCM audio (binary): 16 kHz mono s16le uplink, 24 kHz mono s16le downlink.
+/// There is no auth and no multiplexing — one socket is one call. Audio capture/playback use
+/// `AVAudioEngine`; `AVAudioSession` handles speaker routing (Android's `AudioManager`).
+///
+/// Lifecycle:
+///   1. Caller passes the channel's voice_bot ws_url + bot_key (+ caller first name, agent name).
+///   2. Request mic permission, open the socket, send a `start` frame.
+///   3. On `ready`, stream the mic uplink; play agent audio back gaplessly as it arrives.
+///   4. Hang-up / `call_ended` / socket close → tear everything down.
 public final class VoicebotViewController: BaseViewController {
 
-    /// Public mirror of `ai.ultravox.UltravoxSessionStatus`. Lets us code the
-    /// state machine before the iOS SDK is wired.
-    public enum UltravoxStatus { case connecting, disconnecting, disconnected, idle, listening, thinking, speaking }
+    // Uplink: 16 kHz mono s16le. Downlink: 24 kHz mono s16le.
+    private static let inRate: Double = 16000
+    private static let outRate: Double = 24000
 
-    private static let agentName = "ViH Shruti"
+    private let wsUrl: String
+    private let botKey: String
+    private let firstName: String
+    private let agentName: String
 
-    private let sessionId: String
-    private var callId: String?
-    private var callDetailsFired = false
     private var speakerOn = true
-    private var speakerInitialised = false
+    private var muted = false
+    private var callEnded = false
+    private var micActive = false
 
     private let orbView = VoicebotOrbView()
     private let statusLabel = UILabel()
@@ -29,24 +36,37 @@ public final class VoicebotViewController: BaseViewController {
     private let muteButton = UIButton(type: .system)
     private let speakerButton = UIButton(type: .system)
 
-    /// Placeholder for the live Ultravox session (the Android equivalent is
-    /// `ai.ultravox.UltravoxSession`). Plug in the iOS SDK once available.
-    private var session: AnyObject?
+    // Transport + audio
+    private var wsSession: URLSession?
+    private var task: URLSessionWebSocketTask?
+    private let engine = AVAudioEngine()
+    private let playerNode = AVAudioPlayerNode()
+    private var captureConverter: AVAudioConverter?
+    private var micTapInstalled = false
+    private let playbackFormat = AVAudioFormat(
+        commonFormat: .pcmFormatFloat32, sampleRate: 24000, channels: 1, interleaved: false
+    )!
 
-    public init(sessionId: String) {
-        self.sessionId = sessionId
+    public init(wsUrl: String, botKey: String, firstName: String, agentName: String) {
+        self.wsUrl = wsUrl
+        self.botKey = botKey
+        self.firstName = firstName
+        self.agentName = agentName
         super.init(nibName: nil, bundle: nil)
     }
     required init?(coder: NSCoder) { fatalError("not supported") }
 
+    // MARK: - UI
+
     public override func initView() {
         view.backgroundColor = .black
-        agentNameLabel.text = Self.agentName
+        let title = agentName.isEmpty ? "Voice Assistant" : agentName
+        agentNameLabel.text = title
         agentNameLabel.textColor = .white
         agentNameLabel.font = .systemFont(ofSize: 20, weight: .semibold)
         agentNameLabel.textAlignment = .center
 
-        statusLabel.text = "Calling \(Self.agentName)…"
+        statusLabel.text = "Calling \(title)…"
         statusLabel.textColor = .white
         statusLabel.font = .systemFont(ofSize: 14)
         statusLabel.textAlignment = .center
@@ -102,7 +122,7 @@ public final class VoicebotViewController: BaseViewController {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 if granted {
-                    self.startConnectFlow()
+                    self.connect()
                 } else {
                     self.showErrorAndFinish("Microphone permission is required to start the voice call")
                 }
@@ -110,71 +130,191 @@ public final class VoicebotViewController: BaseViewController {
         }
     }
 
-    private func startConnectFlow() {
-        guard !sessionId.isEmpty else {
-            showErrorAndFinish("Missing session id")
+    // MARK: - Transport
+
+    private func connect() {
+        guard !wsUrl.isEmpty, !botKey.isEmpty else {
+            showErrorAndFinish("Missing call details")
             return
         }
-        Task { [weak self] in
+        guard let url = URL(string: wsUrl) else {
+            showErrorAndFinish("Invalid call URL")
+            return
+        }
+
+        setCallAudioMode()
+        do {
+            try startAudioEngine()
+        } catch {
+            CorrelationLogger.warn(message: "audio engine start failed", error: error)
+            showErrorAndFinish("Could not start audio")
+            return
+        }
+
+        let session = URLSession(configuration: .default)
+        wsSession = session
+        let socket = session.webSocketTask(with: url)
+        task = socket
+        socket.resume()
+
+        // Send the start frame immediately — URLSession queues it until the socket opens.
+        // `outbound` => the agent greets first (correct for tap-to-call).
+        let start: [String: Any] = [
+            "type": "start",
+            "bot": botKey,
+            "direction": "outbound",
+            "context": ["first_name": firstName]
+        ]
+        sendJSON(start)
+        receiveLoop()
+    }
+
+    private func sendJSON(_ object: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: object),
+              let text = String(data: data, encoding: .utf8) else { return }
+        task?.send(.string(text)) { error in
+            if let error = error { CorrelationLogger.warn(message: "ws send failed", error: error) }
+        }
+    }
+
+    private func receiveLoop() {
+        task?.receive { [weak self] result in
             guard let self = self else { return }
-            do {
-                let response = try await APIClient.shared.apiService.postLoanApproval(
-                    url: BaseAPIConstants.loanApprovalURL,
-                    body: LoanApprovalRequest(session_id: self.sessionId)
-                )
-                let url = response.voiceWsUrl?.isEmpty == false ? response.voiceWsUrl : response.data?.url
-                let id = response.callId?.isEmpty == false ? response.callId : response.data?.callId
-                guard let url = url, !url.isEmpty, let id = id, !id.isEmpty else {
-                    await MainActor.run { self.showErrorAndFinish("Invalid loan-approval response") }
-                    return
+            switch result {
+            case .failure(let error):
+                DispatchQueue.main.async {
+                    guard !self.callEnded else { return }
+                    CorrelationLogger.warn(message: "ws receive failed", error: error)
+                    self.showErrorAndFinish("Connection failed")
                 }
-                await MainActor.run {
-                    self.callId = id
-                    self.connectToUltravox(joinUrl: url)
+            case .success(let message):
+                switch message {
+                case .string(let text): self.handleControl(text)
+                case .data(let data): self.handleAudioDown(data)
+                @unknown default: break
                 }
-            } catch {
-                await MainActor.run { self.showErrorAndFinish("Could not reach loan-approval service") }
+                self.receiveLoop()
             }
         }
     }
 
-    private func connectToUltravox(joinUrl: String) {
-        // TODO: Replace with `UltravoxSession(...).joinCall(joinUrl)` once the
-        // Ultravox iOS SwiftPM package is added in Package.swift.
-        CorrelationLogger.info(message: "ultravox joinCall placeholder url=\(joinUrl)")
-        apply(status: .connecting)
+    private func handleControl(_ text: String) {
+        guard let data = text.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = obj["type"] as? String else { return }
+        switch type {
+        case "ready":
+            DispatchQueue.main.async {
+                self.statusLabel.isHidden = true
+                self.orbView.setSpeakingLevel(0.15)
+                self.micActive = true // start streaming the mic uplink now
+            }
+        case "event":
+            let name = obj["name"] as? String
+            if name == "barge_in" {
+                flushPlayback()
+            } else if name == "call_ended" {
+                DispatchQueue.main.async { self.endCall(remote: true) }
+            }
+        case "error":
+            let message = (obj["message"] as? String) ?? ""
+            DispatchQueue.main.async { self.showBusyOrError(message) }
+        default:
+            break // tts_chunk / *_transcript / assistant_* — audio arrives as binary
+        }
     }
 
-    /// Mirrors Android `applyStatus(...)`. The orb pulse amplitude is tied to
-    /// the call lifecycle since the SDK doesn't expose raw audio levels.
-    public func apply(status: UltravoxStatus) {
-        if !speakerInitialised, status == .listening || status == .speaking || status == .idle {
-            speakerInitialised = true
-            applySpeakerRouting(speakerOn)
+    // MARK: - Audio engine
+
+    private func startAudioEngine() throws {
+        // Playback: 24 kHz mono float; the mixer resamples to hardware output.
+        engine.attach(playerNode)
+        engine.connect(playerNode, to: engine.mainMixerNode, format: playbackFormat)
+
+        // Capture: convert the hardware input format down to 16 kHz mono s16le.
+        let input = engine.inputNode
+        let inputFormat = input.inputFormat(forBus: 0)
+        guard let uplinkFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16, sampleRate: Self.inRate, channels: 1, interleaved: true
+        ) else { throw NSError(domain: "voicebot", code: -1) }
+        captureConverter = AVAudioConverter(from: inputFormat, to: uplinkFormat)
+
+        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
+            self?.onMicBuffer(buffer, uplinkFormat: uplinkFormat, inputRate: inputFormat.sampleRate)
         }
-        switch status {
-        case .disconnected:
-            orbView.setSpeakingLevel(0)
-            fireCallDetails()
-            dismiss(animated: true)
-        case .disconnecting:
-            orbView.setSpeakingLevel(0)
-        case .connecting:
-            statusLabel.isHidden = false
-            statusLabel.text = "Connecting…"
-        case .idle:
-            statusLabel.isHidden = true
-            orbView.setSpeakingLevel(0.1)
-        case .listening:
-            statusLabel.isHidden = true
-            orbView.setSpeakingLevel(0.2)
-        case .thinking:
-            statusLabel.isHidden = true
-            orbView.setSpeakingLevel(0.45)
-        case .speaking:
-            statusLabel.isHidden = true
-            orbView.setSpeakingLevel(0.8)
+        micTapInstalled = true
+
+        engine.prepare()
+        try engine.start()
+        playerNode.play()
+    }
+
+    private func onMicBuffer(_ buffer: AVAudioPCMBuffer, uplinkFormat: AVAudioFormat, inputRate: Double) {
+        guard micActive, let converter = captureConverter else { return }
+        let ratio = Self.inRate / inputRate
+        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio + 1024)
+        guard let out = AVAudioPCMBuffer(pcmFormat: uplinkFormat, frameCapacity: capacity) else { return }
+
+        var supplied = false
+        let inputBlock: AVAudioConverterInputBlock = { _, status in
+            if supplied { status.pointee = .noDataNow; return nil }
+            supplied = true
+            status.pointee = .haveData
+            return buffer
         }
+        var err: NSError?
+        converter.convert(to: out, error: &err, withInputFrom: inputBlock)
+        guard err == nil, let channel = out.int16ChannelData, out.frameLength > 0 else { return }
+
+        let byteCount = Int(out.frameLength) * MemoryLayout<Int16>.size
+        // Mute streams digital silence (zeroed frames), never stops — the server's VAD must
+        // keep hearing the uplink.
+        let data = muted ? Data(count: byteCount) : Data(bytes: channel[0], count: byteCount)
+        task?.send(.data(data)) { _ in }
+    }
+
+    private func handleAudioDown(_ data: Data) {
+        guard !callEnded, data.count >= 2 else { return }
+        let frameCount = data.count / MemoryLayout<Int16>.size
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: playbackFormat, frameCapacity: AVAudioFrameCount(frameCount)),
+              let out = buffer.floatChannelData else { return }
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        data.withUnsafeBytes { raw in
+            let samples = raw.bindMemory(to: Int16.self)
+            let dst = out[0]
+            for i in 0..<frameCount { dst[i] = Float(samples[i]) / 32768.0 }
+        }
+        playerNode.scheduleBuffer(buffer, completionHandler: nil)
+        if !playerNode.isPlaying { playerNode.play() }
+        driveOrbFromAudio()
+    }
+
+    /// Barge-in: drop everything buffered/queued so the cut feels immediate.
+    private func flushPlayback() {
+        playerNode.stop()          // clears scheduled buffers
+        playerNode.play()          // ready for the next utterance
+        DispatchQueue.main.async {
+            NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(self.orbIdle), object: nil)
+            self.orbView.setSpeakingLevel(0.15)
+        }
+    }
+
+    private func driveOrbFromAudio() {
+        DispatchQueue.main.async {
+            self.orbView.setSpeakingLevel(0.85)
+            NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(self.orbIdle), object: nil)
+            self.perform(#selector(self.orbIdle), with: nil, afterDelay: 0.25)
+        }
+    }
+
+    @objc private func orbIdle() { orbView.setSpeakingLevel(0.15) }
+
+    // MARK: - Controls
+
+    @objc private func toggleMute() {
+        muted.toggle()
+        muteButton.tintColor = muted ? .systemRed : .white
+        muteButton.setImage(UIImage(systemName: muted ? "mic.slash.fill" : "mic.fill"), for: .normal)
     }
 
     @objc private func toggleSpeaker() {
@@ -186,8 +326,12 @@ public final class VoicebotViewController: BaseViewController {
         )
     }
 
-    /// Equivalent of `AudioManager.setCommunicationDevice` — routes call audio
-    /// between speaker and earpiece via `AVAudioSession`.
+    private func setCallAudioMode() {
+        applySpeakerRouting(speakerOn)
+    }
+
+    /// Equivalent of `AudioManager.setCommunicationDevice` — routes call audio between the
+    /// speaker and earpiece via `AVAudioSession`.
     private func applySpeakerRouting(_ on: Bool) {
         do {
             let session = AVAudioSession.sharedInstance()
@@ -199,50 +343,55 @@ public final class VoicebotViewController: BaseViewController {
         }
     }
 
-    @objc private func toggleMute() {
-        // Wire `UltravoxSession.toggleMicMuted()` once the iOS SDK is integrated.
-        let willMute = muteButton.tintColor != .systemRed
-        muteButton.tintColor = willMute ? .systemRed : .white
-        muteButton.setImage(UIImage(systemName: willMute ? "mic.slash.fill" : "mic.fill"), for: .normal)
-    }
+    // MARK: - Teardown
 
     @objc private func hangUp() {
-        fireCallDetails()
-        teardown()
-        dismiss(animated: true)
+        sendJSON(["type": "end"]) // best-effort
+        endCall(remote: false)
     }
 
-    /// Idempotent — guarded by `callDetailsFired` so the user-hang-up path and
-    /// the server-disconnect path don't both fire it. Uses an unstructured
-    /// `Task` so the request completes after dismissal.
-    private func fireCallDetails() {
-        if callDetailsFired { return }
-        guard let id = callId, !id.isEmpty, !sessionId.isEmpty else { return }
-        callDetailsFired = true
-        Task {
-            do {
-                _ = try await APIClient.shared.apiService.postCallDetails(
-                    url: BaseAPIConstants.callDetailsURL,
-                    body: CallDetailsRequest(call_id: id, session_id: sessionId)
-                )
-            } catch {
-                CorrelationLogger.warn(message: "call-details failed", error: error)
-            }
-        }
-    }
-
-    private func teardown() {
-        // Wire `session?.leaveCall()` once the iOS SDK is integrated.
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+    private func showBusyOrError(_ message: String) {
+        let friendly = message.range(of: "busy", options: .caseInsensitive) != nil
+            ? "All lines are busy, please try again."
+            : "Call error. Please try again."
+        let alert = UIAlertController(title: nil, message: friendly, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
+            self?.endCall(remote: true)
+        })
+        present(alert, animated: true)
     }
 
     private func showErrorAndFinish(_ message: String) {
         let alert = UIAlertController(title: nil, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: "OK", style: .default) { [weak self] _ in
-            if self?.callId?.isEmpty == false { self?.fireCallDetails() }
-            self?.dismiss(animated: true)
+            self?.endCall(remote: true)
         })
         present(alert, animated: true)
+    }
+
+    /// Idempotent full teardown. `remote` just distinguishes who initiated (for logging).
+    private func endCall(remote: Bool) {
+        if callEnded { return }
+        callEnded = true
+        micActive = false
+        CorrelationLogger.info(message: "endCall remote=\(remote)")
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(orbIdle), object: nil)
+        teardown()
+        dismiss(animated: true)
+    }
+
+    private func teardown() {
+        if micTapInstalled {
+            engine.inputNode.removeTap(onBus: 0)
+            micTapInstalled = false
+        }
+        playerNode.stop()
+        if engine.isRunning { engine.stop() }
+        task?.cancel(with: .goingAway, reason: nil)
+        task = nil
+        wsSession?.invalidateAndCancel()
+        wsSession = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     deinit { teardown() }

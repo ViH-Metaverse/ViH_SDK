@@ -8,14 +8,12 @@ import com.vihmessenger.vihchatbot.data.model.DeviceTokenRequest
 import com.vihmessenger.vihchatbot.data.model.DeviceTokenResponse
 import com.vihmessenger.vihchatbot.data.model.EnterPriseDiscoverModel
 import com.vihmessenger.vihchatbot.data.model.EnterpriseApiResponse
-import com.vihmessenger.vihchatbot.data.model.CallDetailsRequest
+import com.vihmessenger.vihchatbot.data.model.GenericStatusResponse
 import com.vihmessenger.vihchatbot.data.model.IndustryResponse
 import com.vihmessenger.vihchatbot.data.model.EmailLoginRequest
 import com.vihmessenger.vihchatbot.data.model.EmailLoginResponse
 import com.vihmessenger.vihchatbot.data.model.SubscribeChannelRequest
 import com.vihmessenger.vihchatbot.data.model.SubscribeChannelResponse
-import com.vihmessenger.vihchatbot.data.model.LoanApprovalRequest
-import com.vihmessenger.vihchatbot.data.model.LoanApprovalResponse
 import com.vihmessenger.vihchatbot.data.model.LogoutDataModel
 import com.vihmessenger.vihchatbot.data.model.SdkFeatureResponse
 import com.vihmessenger.vihchatbot.data.model.UpdateUserProfile
@@ -38,8 +36,6 @@ import retrofit2.http.Part
 import retrofit2.http.PartMap
 import retrofit2.http.Path
 import retrofit2.http.Query
-import retrofit2.http.Url
-import com.google.gson.JsonObject
 
 /**
  * SECURITY: Authorization header is now injected centrally via AuthInterceptor.
@@ -140,15 +136,27 @@ interface ApiService : BaseApiService {
         @Body body: DeviceTokenRequest
     ): Response<DeviceTokenResponse>
 
-    @POST
-    suspend fun postLoanApproval(
-        @Url url: String,
-        @Body body: LoanApprovalRequest
-    ): Response<LoanApprovalResponse>
+    // --- Per-enterprise state mutations (see EnterPriseModel flags) ---
 
-    @POST
-    suspend fun postCallDetails(
-        @Url url: String,
-        @Body body: CallDetailsRequest
-    ): Response<JsonObject>
+    @FormUrlEncoded
+    @POST(BaseAPIConstants.USER_BLACKLIST_ENTERPRISE)
+    suspend fun blacklistEnterprise(
+        @Field("enterprise_pk") enterprisePk: Int,
+        @Field("blacklist") blacklist: String   // "true" / "false"
+    ): Response<GenericStatusResponse>
+
+    @FormUrlEncoded
+    @POST(BaseAPIConstants.MUTE_ENTERPRISE)
+    suspend fun muteEnterprise(
+        @Field("enterprise_id") enterpriseId: Int,
+        @Field("mute_status") muteStatus: Boolean
+    ): Response<GenericStatusResponse>
+
+    @FormUrlEncoded
+    @POST(BaseAPIConstants.USER_CHANNEL_ENTERPRISE_CONFIG)
+    suspend fun updateEnterprisePromotional(
+        @Field("promotional_opt_in") optIn: Boolean,
+        @Field("enterprise_id") enterpriseId: Int,
+        @Field("channel_id") channelId: String
+    ): Response<GenericStatusResponse>
 }

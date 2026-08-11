@@ -22,6 +22,7 @@ import com.vihmessenger.vihchatbot.databinding.ItemChatTemplateProductBinding
 import com.vihmessenger.vihchatbot.ui.custom.CustomViewPager
 import com.vihmessenger.vihchatbot.utils.extensions.dpToPx
 import com.vihmessenger.vihchatbot.utils.extensions.withAlpha
+import com.vihmessenger.vihchatbot.utils.ExternalUrl
 
 
 class ProductViewPagerAdapter(var context: Context, var productList: List<ProductModel>) :
@@ -76,13 +77,13 @@ class ProductViewPagerAdapter(var context: Context, var productList: List<Produc
         if (productList[position].addtocrt == "1") {
             viewBinder.cvAddCart.visibility = View.VISIBLE
             viewBinder.cvAddCart.setOnClickListener {
-                val url = productList[position].addttocrt_url ?: ""
-                if (url.isNotBlank() && url.startsWith("http")) {
-                    val urlIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    context.startActivity(urlIntent)
-                } else {
-                    Toast.makeText(context, "Invalid or missing URL", Toast.LENGTH_SHORT).show()
-                }
+                // SECURITY (VAPT F-16): startsWith("http") also matches "httpfoo:" — parse
+                // and allowlist the scheme instead of prefix-matching it.
+                ExternalUrl.open(
+                    context,
+                    productList[position].addttocrt_url,
+                    invalidMessage = "Invalid or missing URL"
+                )
             }
             val colorWithAlpha = (0x10 shl 24) or (secondaryColor and 0x00FFFFFF)
             val backgroundDrawable = viewBinder.cvAddCart.background
@@ -104,13 +105,13 @@ class ProductViewPagerAdapter(var context: Context, var productList: List<Produc
         if (productList[position].buynw == "1") {
             viewBinder.cvBuyNow.visibility = View.VISIBLE
             viewBinder.cvBuyNow.setOnClickListener {
-                val url = productList[position].buynw_url ?: ""
-                if (url.isNotBlank() && url.startsWith("http")) {
-                    val urlIntent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                    context.startActivity(urlIntent)
-                } else {
-                    Toast.makeText(context, "Invalid or missing URL", Toast.LENGTH_SHORT).show()
-                }
+                // SECURITY (VAPT F-16): startsWith("http") also matches "httpfoo:" — parse
+                // and allowlist the scheme instead of prefix-matching it.
+                ExternalUrl.open(
+                    context,
+                    productList[position].buynw_url,
+                    invalidMessage = "Invalid or missing URL"
+                )
             }
             val colorWithAlpha = (0x10 shl 24) or (secondaryColor and 0x00FFFFFF)
 

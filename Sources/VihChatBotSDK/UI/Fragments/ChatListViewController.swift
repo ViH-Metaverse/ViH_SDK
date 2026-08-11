@@ -101,6 +101,8 @@ public final class ChatListCell: UITableViewCell {
     private let subtitleLabel = UILabel()
     private let dateLabel = UILabel()
     private let badge = UILabel()
+    /// Reflects per-enterprise state ("Blocked" / a mute glyph). Hidden when clear.
+    private let statusLabel = UILabel()
 
     private static let inFmt: DateFormatter = {
         let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX")
@@ -131,7 +133,11 @@ public final class ChatListCell: UITableViewCell {
         dateLabel.setContentHuggingPriority(.required, for: .horizontal)
         dateLabel.translatesAutoresizingMaskIntoConstraints = false
 
-        let stack = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
+        statusLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        statusLabel.textColor = .secondaryLabel
+        statusLabel.isHidden = true
+
+        let stack = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel, statusLabel])
         stack.axis = .vertical
         stack.spacing = 3
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -190,6 +196,27 @@ public final class ChatListCell: UITableViewCell {
             badge.isHidden = false
         } else {
             badge.isHidden = true
+        }
+
+        // Reflect per-enterprise state (nil flags read as false). Build an attributed
+        // string so the mute state shows as an SF Symbol glyph alongside "Blocked".
+        let blocked = model.enterprise.isBlacklistedByUser == true
+        let muted = model.enterprise.isMutedByUser == true
+        if blocked || muted {
+            let status = NSMutableAttributedString()
+            if muted, let icon = UIImage(systemName: "speaker.slash.fill") {
+                let att = NSTextAttachment()
+                att.image = icon.withTintColor(.secondaryLabel, renderingMode: .alwaysOriginal)
+                att.bounds = CGRect(x: 0, y: -1, width: 12, height: 12)
+                status.append(NSAttributedString(attachment: att))
+                if blocked { status.append(NSAttributedString(string: "  ")) }
+            }
+            if blocked { status.append(NSAttributedString(string: "Blocked")) }
+            statusLabel.attributedText = status
+            statusLabel.isHidden = false
+        } else {
+            statusLabel.attributedText = nil
+            statusLabel.isHidden = true
         }
     }
 }

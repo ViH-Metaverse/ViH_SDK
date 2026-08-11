@@ -52,7 +52,17 @@ data class EnterPriseModel(
     @SerializedName("enterprise_display_name") var enterprise_display_name: String? = null,
     @SerializedName("enterprise_name") var enterprise_name: String? = null,
     @SerializedName("enterprise_display_img") var enterprise_display_img: String? = null,
-    @SerializedName("enterprise_logo") var enterprise_logo: String? = null
+    @SerializedName("enterprise_logo") var enterprise_logo: String? = null,
+    // Per-enterprise state flags computed server-side against the user's active channel
+    // (EnterpriseSerializer). Backend sends them nullable; default null and always compare
+    // with `== true` so a null/omitted flag reads as false. Populated by the discover,
+    // session-list and enterprise-details endpoints (each fills a different subset).
+    @SerializedName("is_blacklisted_by_channel") var is_blacklisted_by_channel: Boolean? = null,
+    @SerializedName("is_blacklisted_by_user") var is_blacklisted_by_user: Boolean? = null,
+    @SerializedName("is_muted_by_user") var is_muted_by_user: Boolean? = null,
+    // promotional_opt_in and is_promotional_message_blocked are INVERSE: opt_in=true => not blocked.
+    @SerializedName("is_promotional_message_blocked") var is_promotional_message_blocked: Boolean? = null,
+    @SerializedName("promotional_opt_in") var promotional_opt_in: Boolean? = null
 ) : Serializable {
 
     /**

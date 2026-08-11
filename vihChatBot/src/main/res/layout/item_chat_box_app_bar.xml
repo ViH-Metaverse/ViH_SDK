@@ -68,10 +68,11 @@
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Start voice call"
+            android:contentDescription="Call voice assistant"
             android:padding="8dp"
             android:scaleType="centerInside"
-            android:src="@drawable/ic_voicebot_mic" />
+            android:src="@drawable/ic_call"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/tvToolBarMain"

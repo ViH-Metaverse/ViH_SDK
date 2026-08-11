@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SECURITY (VAPT F-03) — shipped by the SDK library, not the demo app.
+
+    The previous configuration lived only in `app/src/main/res/xml/`. A library module's
+    resources do not carry a `networkSecurityConfig` attribute into consumers, so every
+    third-party host app embedding this AAR got default platform trust and no cleartext
+    restriction. This file is referenced from the library manifest so the policy merges
+    into host apps automatically.
+
+    A host app that already declares its own android:networkSecurityConfig wins the merge —
+    integrators who do so must replicate these rules. See docs/sdk-integration-security.md.
+
+    Pins are the AWS CAs fronting the API hosts (issuing intermediate + Amazon Root CA 1 as
+    backup) rather than the leaf certificates: ACM auto-renews with a fresh key pair, so
+    leaf pins would brick shipped clients at rotation. Rationale in ApiClient.kt.
+-->
+<network-security-config>
+
+    <!-- Block cleartext (HTTP) traffic by default for all domains. -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!--
+        Debug builds may trust user-installed CAs so developers can proxy traffic.
+        This block is inert in release builds — it keys off android:debuggable.
+    -->
+    <debug-overrides>
+        <trust-anchors>
+            <certificates src="user" />
+            <certificates src="system" />
+        </trust-anchors>
+    </debug-overrides>
+
+    <!-- Production API -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">api.platform.vihresearchlabs.ai</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+        <!-- Renew before this date; see the rotation note in ApiClient.kt. -->
+        <pin-set expiration="2030-08-23">
+            <!-- Amazon RSA 2048 M04 (issuing intermediate) -->
+            <pin digest="SHA-256">G9LNNAql897egYsabashkzUCTEJkWBzgoEtk8X/678c=</pin>
+            <!-- Amazon Root CA 1 (backup, valid to 2037) -->
+            <pin digest="SHA-256">++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!-- Staging API -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="false">api.dev.platform.vihresearchlabs.ai</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+        <pin-set expiration="2030-08-23">
+            <!-- Amazon RSA 2048 M01 (issuing intermediate) -->
+            <pin digest="SHA-256">DxH4tt40L+eduF6szpY6TONlxhZhBd+pJ9wbHlQ2fuw=</pin>
+            <!-- Amazon Root CA 1 (backup) -->
+            <pin digest="SHA-256">++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI=</pin>
+        </pin-set>
+    </domain-config>
+
+    <!--
+        TEMPORARY carve-out for the voice-bot (VAPT F-04). The call transport is a raw ws://
+        socket on a firewall-restricted host with no TLS terminator and no authentication, so
+        the platform would otherwise block it outright.
+
+        This exemption exists only so the transport can be reached at all; it does NOT make
+        the call safe. VoicebotActivity independently refuses to open a cleartext socket
+        unless the host app sets VihSecurity.allowInsecureVoiceTransport = true, which makes
+        accepting the risk an explicit, auditable choice by the integrator rather than a
+        silent SDK default.
+
+        DELETE THIS BLOCK once the voice-bot is served over wss://.
+    -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">45.195.90.244</domain>
+    </domain-config>
+
+</network-security-config>
