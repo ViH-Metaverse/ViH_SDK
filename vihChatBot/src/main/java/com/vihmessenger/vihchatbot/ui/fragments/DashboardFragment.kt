@@ -862,7 +862,25 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
     }
 
 
-    private fun checkAndPromptForShortcut(chatBoatLogoUrl: String, chatBotName: String) {
+    private fun checkAndPromptForShortcut(chatBoatLogoUrl: String, rawChatBotName: String) {
+        // ShortcutInfoCompat rejects an empty short label, so a channel with no chat_boat_name
+        // crashed the host app when the user tapped "Yes" on the first-login prompt
+        // (IllegalArgumentException: Shortcut must have a non-empty label). Android then
+        // relaunched the task root, which looked like the app restarting itself. Resolve the
+        // label once here — falling back to the host app's own name — and skip the offer
+        // entirely if even that is unavailable. The prompt text at showAddShortcutDialog also
+        // reads from this, so it no longer renders a blank name.
+        val chatBotName = rawChatBotName.ifBlank {
+            runCatching {
+                val ctx = requireContext()
+                ctx.applicationInfo.loadLabel(ctx.packageManager).toString()
+            }.getOrDefault("")
+        }
+        if (chatBotName.isBlank()) {
+            VihLog.w(TAG, "Skipping shortcut prompt: no usable label (chat_boat_name is blank).")
+            return
+        }
+
         val isShortcutAdded = prefs.shortcutAddedSuccessfully
         VihLog.i(
             TAG,
@@ -1070,6 +1088,11 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
                         context,
                         R.drawable.placeholder
                     ) // Ensure this is your app's launcher icon
+                }
+
+                if (chatBotName.isBlank()) {
+                    VihLog.e(TAG, "createHomeScreenShortcut: blank label, refusing to build shortcut.")
+                    return@launch
                 }
 
                 // Build shortcutInfo using shortcutIntentForActivity

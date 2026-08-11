@@ -57,6 +57,13 @@
 -dontwarn aws.smithy.kotlin.runtime.**
 -dontwarn com.amplifyframework.**
 
+# waveformSeekBar 5.0.2 references the pre-rename linc.com.amplituda.* package; amplituda
+# 2.3.1 ships it as com.linc.amplituda.*. We decode samples ourselves via
+# com.linc.amplituda.Amplituda (TemplateMessageViewHolder), so WaveformOptions — the only
+# thing referencing the old package — is never called. Without this every consumer's release
+# build fails R8 with "Missing class linc.com.amplituda.Amplituda".
+-dontwarn linc.com.amplituda.**
+
 # ── SECURITY (VAPT F-06, CWE-532) ───────────────────────────────────────
 # Strip every android.util.Log call from the consuming app's release build.
 # This is belt-and-braces behind VihLog's BuildConfig.DEBUG gate: it also catches
