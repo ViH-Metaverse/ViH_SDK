@@ -20,6 +20,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import com.vihmessenger.vihchatbot.AppController
 import com.vihmessenger.vihchatbot.R
 import com.vihmessenger.vihchatbot.data.services.BaseViewModelFactory
 import com.vihmessenger.vihchatbot.utils.DynamicThemeManager
@@ -87,6 +88,10 @@ abstract class BaseActivity : AppCompatActivity(), DynamicThemeManager.ThemeChan
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // The SDK's own Application class only runs when the SDK owns the process. A host with
+        // its own Application (React Native's MainApplication, say) wins the manifest merge, so
+        // process-wide setup has to be reachable from the Activity side too. Idempotent.
+        AppController.ensureInitialized(this)
         // SECURITY (VAPT F-09): must run before the window is first drawn — FLAG_SECURE is
         // not applied retroactively to frames already rendered.
         ScreenCapturePolicy.apply(this)

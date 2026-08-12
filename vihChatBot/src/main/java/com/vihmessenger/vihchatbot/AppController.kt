@@ -2,6 +2,7 @@ package com.vihmessenger.vihchatbot
 
 import android.app.Activity
 import android.app.Application
+import android.content.Context
 import android.os.Bundle
 import com.vihmessenger.vihchatbot.utils.VihLog
 import androidx.appcompat.app.AppCompatDelegate
@@ -36,6 +37,123 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
         fun isAppInForeground(): Boolean {
             return currentActivityCount > 0
         }
+
+        @Volatile
+        private var initialised = false
+
+        @Volatile
+        private var networkMonitor: NetworkConnectivityManager? = null
+
+        /**
+         * Brings up the process-wide state the SDK's screens assume exists, exactly once.
+         *
+         * All of this used to live only in [onCreate]. An Android process has one `Application`
+         * object, and the host app's declaration wins the manifest merge over the library's
+         * `android:name=".AppController"` — so in any app that ships its own Application class
+         * (React Native's `MainApplication`, Hilt's generated one, …) `AppController.onCreate`
+         * never runs and every companion field below stays null. The failures that produced
+         * were all crashes with no obvious link to their cause:
+         *
+         *  - `EmojiPopup` threw `IllegalStateException: Please install an EmojiProvider …`
+         *  - `ChatActivity.prefs` (`AppController.prefs!!`) threw `KotlinNullPointerException`
+         *  - `BaseCloudAPIService.getApiService` threw `CloudApiService cannot be null`
+         *  - `VihTokenAuthenticator` silently gave up on every 401, so 1.1.5's automatic
+         *    session renewal never actually ran in a host-driven app
+         *
+         * [BaseActivity.onCreate] and the [com.vihmessenger.vihchatbot.discover.VihDiscover]
+         * entry points both call this, so the SDK no longer depends on owning the Application.
+         *
+         * Deliberately excluded: `AppCompatDelegate.setDefaultNightMode` and Amplify. Both are
+         * process-global settings that belong to whoever owns the app, and forcing them from a
+         * library screen would reach into the host's own UI.
+         */
+        @JvmStatic
+        fun ensureInitialized(context: Context) {
+            if (initialised) return
+            synchronized(this) {
+                if (initialised) return
+                val app = context.applicationContext
+                runCatching {
+                    if (prefs == null) prefs = Prefs.getInstance(app)
+                }.onFailure { VihLog.e(TAG, "Prefs init failed: ${it.message}") }
+                runCatching {
+                    if (cloudApiService == null) cloudApiService = BaseCloudAPIService()
+                }.onFailure { VihLog.e(TAG, "Retrofit init failed: ${it.message}") }
+                runCatching { FirebaseApp.initializeApp(app) }
+                runCatching { DynamicThemeManager.loadSavedTheme(app) }
+                ensureEmojiProvider(app)
+                initialised = true
+            }
+        }
+
+        /**
+         * The shared connectivity monitor. Created on demand so it also exists when the host
+         * owns the Application — [DiscoverFragment] used to reach it by casting
+         * `requireActivity().application` to [AppController], which is a ClassCastException in
+         * exactly the same hosts.
+         */
+        @JvmStatic
+        fun sharedNetworkMonitor(context: Context): NetworkConnectivityManager =
+            networkMonitor ?: synchronized(this) {
+                networkMonitor ?: NetworkConnectivityManager(
+                    context.applicationContext as Application
+                ).also {
+                    it.startMonitoring()
+                    networkMonitor = it
+                }
+            }
+
+        @Volatile
+        private var emojiProviderInstalled = false
+
+        /**
+         * Installs the emoji provider that [com.vanniktech.emoji.EmojiPopup] requires, exactly
+         * once per process.
+         *
+         * This used to run inline in [onCreate], which is only reached when the SDK owns the
+         * `Application` — the library manifest declares `android:name=".AppController"`, but a
+         * host app with its own Application class (React Native's `MainApplication`, for
+         * instance) wins the merge, so `AppController.onCreate` never executes. `ChatActivity`
+         * then built an `EmojiPopup` against an uninstalled manager and the host app died with
+         * `IllegalStateException: Please install an EmojiProvider through the
+         * EmojiManager.install() method first`.
+         *
+         * [BaseActivity.onCreate] now calls this before any SDK screen inflates, so the SDK is
+         * self-sufficient regardless of who owns the Application.
+         */
+        @JvmStatic
+        fun ensureEmojiProvider(context: Context) {
+            if (emojiProviderInstalled) return
+            synchronized(this) {
+                if (emojiProviderInstalled) return
+                runCatching {
+                    val app = context.applicationContext
+                    EmojiManager.install(
+                        GoogleCompatEmojiProvider(
+                            EmojiCompat.init(
+                                FontRequestEmojiCompatConfig(
+                                    app, FontRequest(
+                                        "com.google.android.gms.fonts",
+                                        "com.google.android.gms",
+                                        "Noto Color Emoji Compat",
+                                        R.array.com_google_android_gms_fonts_certs,
+                                    )
+                                ).setReplaceAll(true)
+                            )
+                        )
+                    )
+                    emojiProviderInstalled = true
+                }.onFailure {
+                    // Never let emoji setup take down a host app. Without a provider the popup
+                    // would still throw, so ChatActivity guards its own use as well.
+                    VihLog.e(TAG, "Emoji provider install failed: ${it.javaClass.simpleName} - ${it.message}")
+                }
+            }
+        }
+
+        /** True once [ensureEmojiProvider] has successfully installed the provider. */
+        @JvmStatic
+        fun isEmojiProviderInstalled(): Boolean = emojiProviderInstalled
 
         @Volatile
         private var diagnosticsStarted = false
@@ -79,35 +197,17 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
         super.onCreate()
         registerActivityLifecycleCallbacks(this)
         appController = this
-        cloudApiService = BaseCloudAPIService()
-        // Follow the device's system light/dark setting.
+        // Follow the device's system light/dark setting. Only when the SDK owns the app — see
+        // the note in [ensureInitialized].
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-        prefs = Prefs.getInstance(applicationContext)
-        FirebaseApp.initializeApp(this)
+        ensureInitialized(this)
         initAmplify()
-        networkConnectivityManager = NetworkConnectivityManager(this)
-        networkConnectivityManager.startMonitoring()
-        EmojiManager.install(
-            GoogleCompatEmojiProvider(
-                EmojiCompat.init(
-                    FontRequestEmojiCompatConfig(
-                        this, FontRequest(
-                            "com.google.android.gms.fonts",
-                            "com.google.android.gms",
-                            "Noto Color Emoji Compat",
-                            R.array.com_google_android_gms_fonts_certs,
-                        )
-                    ).setReplaceAll(true)
-                )
-            )
-        )
+        networkConnectivityManager = sharedNetworkMonitor(this)
         // SECURITY (VAPT F-14): diagnostics are NOT started here. Bugfender is a third-party
         // remote log/crash processor, and in an SDK embedded in someone else's app that data
         // flow is the host operator's decision. It is opt-in via VihConfig.diagnostics and is
         // started from [applyDiagnosticsConfig], which VihConfigStore.set invokes once the
         // host has actually supplied a config. No config supplied => nothing leaves the device.
-
-        DynamicThemeManager.loadSavedTheme(this)
 
     }
 

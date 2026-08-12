@@ -295,8 +295,7 @@ class DiscoverFragment : BaseFragment() {
             HomeViewModelFactory()
         ).get(HomeViewModel::class.java)
 
-        networkConnectivityManager =
-            (requireActivity().application as AppController).networkConnectivityManager
+        networkConnectivityManager = AppController.sharedNetworkMonitor(requireContext())
     }
 
     override fun onCreateView(

@@ -195,10 +195,18 @@ class ChatActivity : BaseActivity() {
             chatViewModel.getEnterpriceModel(showBlockingLoader = false, enterpriseId = enterpriseId)
         }
 
-        emojiPopup = EmojiPopup(
-            rootView = _viewBinder.clChat,
-            editText = _viewBinder.lyChatInbox.edtChatInbox
-        )
+        // EmojiPopup's constructor throws IllegalStateException unless an EmojiProvider has been
+        // installed process-wide. BaseActivity.onCreate installs one, but the install itself can
+        // fail on a device without the Google fonts provider — and an emoji keyboard is not worth
+        // taking the chat screen down for.
+        runCatching {
+            emojiPopup = EmojiPopup(
+                rootView = _viewBinder.clChat,
+                editText = _viewBinder.lyChatInbox.edtChatInbox
+            )
+        }.onFailure {
+            VihLog.e(TAG, "EmojiPopup unavailable: ${it.javaClass.simpleName} - ${it.message}")
+        }
 
         sessionId = intent.getStringExtra(SESSION_ID)
         // The FCM content intent always carries "notification_id" (see

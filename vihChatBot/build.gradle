@@ -18,7 +18,7 @@ android {
         // AGP 8 strips VERSION_NAME/VERSION_CODE from library BuildConfig. Expose the
         // SDK version explicitly so DeviceTokenRegistrar can include it in the
         // session-registry payload (architecture §3.3).
-        buildConfigField "String", "SDK_VERSION", "\"1.1.6\""
+        buildConfigField "String", "SDK_VERSION", "\"1.1.7\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
@@ -206,14 +206,14 @@ afterEvaluate {
                 from components.stagingRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk-staging'
-                version = '1.1.6'   // + first-login shortcut crash fix, consumer release builds unblocked (amplituda dontwarn)
+                version = '1.1.7'   // + SDK no longer depends on owning the Application class (host-driven crash fix)
                 applyVihPom(pom)
             }
             prodRelease(MavenPublication) {
                 from components.prodRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk'
-                version = '1.1.6'  // + first-login shortcut crash fix, consumer release builds unblocked (amplituda dontwarn)
+                version = '1.1.7'  // + SDK no longer depends on owning the Application class (host-driven crash fix)
                 applyVihPom(pom)
             }
         }

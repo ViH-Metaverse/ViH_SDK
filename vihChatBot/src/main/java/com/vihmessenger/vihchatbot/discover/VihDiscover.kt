@@ -3,6 +3,7 @@ package com.vihmessenger.vihchatbot.discover
 import android.content.Context
 import android.content.Intent
 import com.google.gson.Gson
+import com.vihmessenger.vihchatbot.AppController
 import com.vihmessenger.vihchatbot.api.services.ApiClient
 import com.vihmessenger.vihchatbot.config.VihConfig
 import com.vihmessenger.vihchatbot.config.VihConfigStore
@@ -107,6 +108,11 @@ object VihDiscover {
                 // emulator images slow enough to stall — so it must not run on the main
                 // thread, which is where this coroutine's scope dispatches.
                 val response = withContext(Dispatchers.IO) {
+                    // The host owns the Application here, so AppController.onCreate never ran.
+                    // Everything downstream (Retrofit, the 401 authenticator, the chat screens)
+                    // reads AppController's companion state, so bring it up first — off the main
+                    // thread, since it constructs Prefs.
+                    AppController.ensureInitialized(appContext)
                     val prefs = Prefs.getInstance(appContext)
                     // Reset stale session state if this is a switch to a different channel, then
                     // mark SDK mode and remember the phone — mirrors FloatingButtonView.startSdk.
@@ -214,6 +220,7 @@ object VihDiscover {
         enterprise: EnterPriseModel? = null,
         landOnDashboard: Boolean = true,
     ) {
+        AppController.ensureInitialized(context)
         val prefs = Prefs.getInstance(context.applicationContext)
         if (prefs.hashcode.isNullOrBlank()) prefs.hashcode = hashcode
 
