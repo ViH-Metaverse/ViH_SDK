@@ -13,6 +13,7 @@ import com.vihmessenger.vihchatbot.config.VihTabId
 import com.vihmessenger.vihchatbot.constants.AppConstants
 import com.vihmessenger.vihchatbot.data.model.EnterPriseModel
 import com.vihmessenger.vihchatbot.data.model.UserProfileRequest
+import com.vihmessenger.vihchatbot.services.DeviceTokenRegistrar
 import com.vihmessenger.vihchatbot.ui.activity.home.ChatActivity
 import com.vihmessenger.vihchatbot.utils.FloatingButtonView
 import com.vihmessenger.vihchatbot.utils.sharedPreference.Prefs
@@ -154,6 +155,10 @@ object VihDiscover {
                         prefs.userProfile = gson.toJson(body.data.user)
                         prefs.accessToken = body.data.access_token
                         prefs.refreshToken = body.data.refresh
+                        // Register for push now that there is a session. Without this the
+                        // backend has no token for this device and nothing that is delivered
+                        // only by push — a Flow Builder response, most visibly — ever arrives.
+                        DeviceTokenRegistrar.registerCachedTokenIfNeeded(appContext)
                     }
                     callback?.onSuccess(Unit)
                 } else {

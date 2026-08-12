@@ -18,7 +18,7 @@ android {
         // AGP 8 strips VERSION_NAME/VERSION_CODE from library BuildConfig. Expose the
         // SDK version explicitly so DeviceTokenRegistrar can include it in the
         // session-registry payload (architecture §3.3).
-        buildConfigField "String", "SDK_VERSION", "\"1.1.8\""
+        buildConfigField "String", "SDK_VERSION", "\"1.1.9\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
@@ -206,14 +206,14 @@ afterEvaluate {
                 from components.stagingRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk-staging'
-                version = '1.1.8'   // + host-driven chat renders correctly (theme defaults, enterprise-details id, config preserved)
+                version = '1.1.9'   // + push actually works in host-driven mode (FCM token, foreground state, flow replies)
                 applyVihPom(pom)
             }
             prodRelease(MavenPublication) {
                 from components.prodRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk'
-                version = '1.1.8'  // + host-driven chat renders correctly (theme defaults, enterprise-details id, config preserved)
+                version = '1.1.9'  // + push actually works in host-driven mode (FCM token, foreground state, flow replies)
                 applyVihPom(pom)
             }
         }

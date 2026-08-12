@@ -63,6 +63,12 @@ class ChatActivity : BaseActivity() {
         private const val MAX_HISTORY_RETRIES = 4
         private const val HISTORY_RETRY_DELAY_MS = 1500L
 
+        // A Flow Builder response is produced after the send call has already returned its
+        // acknowledgement. Four polls over ~10s covers a normal flow turnaround without
+        // becoming a background poller — it stops as soon as the history grows.
+        private const val MAX_FLOW_RESPONSE_POLLS = 4
+        private const val FLOW_RESPONSE_POLL_DELAY_MS = 2500L
+
         // The backend returns a non-reply placeholder when a message is routed to a chatbot
         // flow (which may be unconfigured) — e.g. "Message handled by flow" / "Message handled
         // by the flow", sometimes with is_flow == 0. Match on both distinctive tokens so minor
@@ -137,6 +143,7 @@ class ChatActivity : BaseActivity() {
     private var isLaunchedFromNotification = false
     private var historyRetryCount = 0
     private val historyRetryHandler = Handler(Looper.getMainLooper())
+    private val flowPollHandler = Handler(Looper.getMainLooper())
 
 
     val prefs: Prefs by lazy {
@@ -275,6 +282,28 @@ class ChatActivity : BaseActivity() {
                 _viewBinder.ivChatBackground.setSolidColorFilterCompat()
             }
         }
+    }
+
+    /**
+     * Re-fetches chat history a few times after a flow acknowledgement, until the flow's real
+     * response shows up. Cancelled by [onDestroy] and restarted by each new acknowledgement.
+     */
+    private fun scheduleFlowResponsePoll() {
+        flowPollHandler.removeCallbacksAndMessages(null)
+        val messagesBefore = if (::chatAdapter.isInitialized) chatAdapter.itemCount else 0
+        var attempt = 0
+        lateinit var poll: Runnable
+        poll = Runnable {
+            attempt++
+            getAllChats()
+            val grew = ::chatAdapter.isInitialized && chatAdapter.itemCount > messagesBefore
+            if (!grew && attempt < MAX_FLOW_RESPONSE_POLLS) {
+                flowPollHandler.postDelayed(poll, FLOW_RESPONSE_POLL_DELAY_MS)
+            } else {
+                VihLog.d(TAG, "Flow response poll finished after $attempt attempt(s), grew=$grew")
+            }
+        }
+        flowPollHandler.postDelayed(poll, FLOW_RESPONSE_POLL_DELAY_MS)
     }
 
     private fun getAllChats() {
@@ -449,6 +478,16 @@ class ChatActivity : BaseActivity() {
                     // the backend returns is_flow == 1 and/or a generic "…handled by the flow"
                     // placeholder. Neither is a real reply, so don't render it as a bot bubble.
                     val isFlowAck = data.is_flow == 1 || isFlowAcknowledgement(data.message)
+
+                    if (isFlowAck) {
+                        // The acknowledgement is not the reply — the flow produces that
+                        // asynchronously and delivers it by push. Relying on the push alone is
+                        // fragile: it needs the SDK's FirebaseMessagingService to be the one
+                        // Android picked for MESSAGING_EVENT, which is not guaranteed in a host
+                        // that ships its own (expo-notifications, for one). Poll chat-history a
+                        // bounded number of times so the flow's response appears on its own.
+                        scheduleFlowResponsePoll()
+                    }
 
                     if (!isFlowAck) {
                         chatAdapter.insertMessage(
@@ -841,6 +880,7 @@ class ChatActivity : BaseActivity() {
 
     override fun onDestroy() {
         historyRetryHandler.removeCallbacksAndMessages(null)
+        flowPollHandler.removeCallbacksAndMessages(null)
         if (::chatAdapter.isInitialized) {
             chatAdapter.cleanupAllAudioPlayers()
         }
@@ -849,10 +889,12 @@ class ChatActivity : BaseActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!hasLoadedChats) {
-            getAllChats()
-            hasLoadedChats = true
-        }
+        // Always re-fetch on resume, not just the first time. Anything that arrived while the
+        // screen was away — a flow response, a push the SDK's service never received — is
+        // otherwise invisible until the Activity is destroyed and rebuilt, which is what made
+        // "leave the chat and come back" the workaround for a missing reply.
+        getAllChats()
+        hasLoadedChats = true
 
         val filter = IntentFilter("com.vihmessenger.vihchatbot.FCM_MESSAGE")
         LocalBroadcastManager.getInstance(this@ChatActivity)

@@ -15,11 +15,13 @@ import com.amplifyframework.core.Amplify
 import com.amplifyframework.core.AmplifyConfiguration
 import com.bugfender.sdk.Bugfender
 import com.google.firebase.FirebaseApp
+import com.google.firebase.messaging.FirebaseMessaging
 import org.json.JSONObject
 import com.vanniktech.emoji.EmojiManager
 import com.vanniktech.emoji.googlecompat.GoogleCompatEmojiProvider
 import com.vihmessenger.vihchatbot.config.VihConfigStore
 import com.vihmessenger.vihchatbot.data.services.BaseCloudAPIService
+import com.vihmessenger.vihchatbot.services.DeviceTokenRegistrar
 import com.vihmessenger.vihchatbot.utils.DynamicThemeManager
 import com.vihmessenger.vihchatbot.utils.NetworkConnectivityManager
 import com.vihmessenger.vihchatbot.utils.sharedPreference.Prefs
@@ -36,6 +38,35 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
         private var currentActivityCount = 0
         fun isAppInForeground(): Boolean {
             return currentActivityCount > 0
+        }
+
+        /**
+         * Counts started Activities so [isAppInForeground] can answer.
+         *
+         * A standalone object rather than [AppController] itself, because the registration has
+         * to happen against whichever `Application` actually exists — see [ensureInitialized].
+         * While this lived on the AppController instance and was registered from `onCreate`, a
+         * host-owned Application meant it was never registered, [isAppInForeground] was
+         * permanently false, and [MyFirebaseMessagingService] therefore never broadcast an
+         * inbound message to the open chat. The visible symptom: a Flow Builder keyword
+         * produced no reply until you left the chat and came back, because the flow's real
+         * response arrives asynchronously by push and the send-response only carries a
+         * suppressed acknowledgement.
+         */
+        private object ActivityCounter : Application.ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                currentActivityCount++
+            }
+
+            override fun onActivityStopped(activity: Activity) {
+                if (currentActivityCount > 0) currentActivityCount--
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
+            override fun onActivityResumed(activity: Activity) {}
+            override fun onActivityPaused(activity: Activity) {}
+            override fun onActivityDestroyed(activity: Activity) {}
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
         }
 
         @Volatile
@@ -79,11 +110,49 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
                 runCatching {
                     if (cloudApiService == null) cloudApiService = BaseCloudAPIService()
                 }.onFailure { VihLog.e(TAG, "Retrofit init failed: ${it.message}") }
+                runCatching {
+                    (app as? Application)?.registerActivityLifecycleCallbacks(ActivityCounter)
+                }
                 runCatching { FirebaseApp.initializeApp(app) }
                 runCatching { DynamicThemeManager.loadSavedTheme(app) }
+                ensureFcmToken(app)
                 ensureEmojiProvider(app)
                 initialised = true
             }
+        }
+
+        /**
+         * Obtains the FCM registration token and pushes it to the session registry.
+         *
+         * The token was only ever fetched by `DashboardFragment` and `DashBoardActivity`, so on
+         * the host-driven path — `VihDiscover.openChat` straight into the chat — it was never
+         * fetched at all. `prepareSession` then signed in with `fcm_token: ""`, the backend held
+         * no push token for the device, and **no push was ever delivered**. Anything that only
+         * arrives by push was therefore invisible: most visibly a Flow Builder response, since
+         * the send call returns a suppressed acknowledgement rather than the reply itself.
+         *
+         * [FirebaseMessaging.getInstance] resolves from the cache when a token already exists,
+         * and `onNewToken` only fires on rotation — which is why this never self-corrected.
+         */
+        @JvmStatic
+        fun ensureFcmToken(context: Context) {
+            val app = context.applicationContext
+            runCatching {
+                FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+                    val token = task.result
+                    if (!task.isSuccessful || token.isNullOrBlank()) {
+                        VihLog.w(TAG, "FCM token unavailable: ${task.exception?.message}")
+                        return@addOnCompleteListener
+                    }
+                    runCatching {
+                        if (Prefs.getInstance(app).fcmToken != token) {
+                            DeviceTokenRegistrar.onNewToken(app, token)
+                        } else {
+                            DeviceTokenRegistrar.registerCachedTokenIfNeeded(app)
+                        }
+                    }.onFailure { VihLog.e(TAG, "FCM token registration failed: ${it.message}") }
+                }
+            }.onFailure { VihLog.e(TAG, "FCM token fetch failed: ${it.message}") }
         }
 
         /**
@@ -195,7 +264,6 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
 
     override fun onCreate() {
         super.onCreate()
-        registerActivityLifecycleCallbacks(this)
         appController = this
         // Follow the device's system light/dark setting. Only when the SDK owns the app — see
         // the note in [ensureInitialized].
@@ -259,14 +327,11 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
     }
 
 
-    override fun onActivityStarted(p0: Activity) {
-        currentActivityCount++
-    }
+    // Counting lives in [ActivityCounter], which ensureInitialized registers. These remain
+    // only because the class still declares the interface.
+    override fun onActivityStarted(p0: Activity) {}
 
-
-    override fun onActivityStopped(p0: Activity) {
-        currentActivityCount--
-    }
+    override fun onActivityStopped(p0: Activity) {}
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
     override fun onActivityResumed(activity: Activity) {}
     override fun onActivityPaused(activity: Activity) {}
