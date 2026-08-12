@@ -139,18 +139,30 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
             val app = context.applicationContext
             runCatching {
                 FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-                    val token = task.result
-                    if (!task.isSuccessful || token.isNullOrBlank()) {
-                        VihLog.w(TAG, "FCM token unavailable: ${task.exception?.message}")
-                        return@addOnCompleteListener
-                    }
+                    // The whole callback is guarded. It runs later, on the main looper, so an
+                    // escape here is an uncaught exception in the *host's* process — the
+                    // runCatching around addOnCompleteListener below cannot see it.
                     runCatching {
+                        // isSuccessful must be checked before touching result: Task.getResult()
+                        // rethrows the task's failure as RuntimeExecutionException. Reading it
+                        // first is what crashed hosts whose Firebase config has no valid API
+                        // key — a configuration we cannot control and must not die on, since
+                        // push is an enhancement to the SDK, not a precondition for using it.
+                        if (!task.isSuccessful) {
+                            VihLog.w(TAG, "FCM token unavailable: ${task.exception?.message}")
+                            return@runCatching
+                        }
+                        val token = task.result
+                        if (token.isNullOrBlank()) {
+                            VihLog.w(TAG, "FCM returned a blank token")
+                            return@runCatching
+                        }
                         if (Prefs.getInstance(app).fcmToken != token) {
                             DeviceTokenRegistrar.onNewToken(app, token)
                         } else {
                             DeviceTokenRegistrar.registerCachedTokenIfNeeded(app)
                         }
-                    }.onFailure { VihLog.e(TAG, "FCM token registration failed: ${it.message}") }
+                    }.onFailure { VihLog.e(TAG, "FCM token handling failed: ${it.message}") }
                 }
             }.onFailure { VihLog.e(TAG, "FCM token fetch failed: ${it.message}") }
         }
