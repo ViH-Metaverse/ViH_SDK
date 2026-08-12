@@ -3,7 +3,7 @@ package com.vihmessenger.vihchatbot.utils
 import android.content.Context
 import android.content.res.Configuration
 import android.graphics.Color
-import android.util.TypedValue
+import androidx.core.content.ContextCompat
 import com.vihmessenger.vihchatbot.R
 
 // Create this as a new file: DynamicThemeManager.kt
@@ -36,6 +36,26 @@ object DynamicThemeManager {
     private fun isLight(color: Int): Boolean {
         val lum = (0.299 * Color.red(color) + 0.587 * Color.green(color) + 0.114 * Color.blue(color)) / 255.0
         return lum > 0.6
+    }
+
+    /**
+     * Replaces a fully transparent color with [fallback]. A zero alpha is never a legitimate
+     * theme value — it is what a failed lookup or an uninitialised field leaves behind, and it
+     * renders as an invisible bubble or button rather than as an obvious error.
+     */
+    private fun Int.orDefault(fallback: Int): Int = if (Color.alpha(this) == 0) fallback else this
+
+    /**
+     * Ensures a usable palette exists, without overwriting colors already applied from the
+     * server or from a host [com.vihmessenger.vihchatbot.config.VihTheme].
+     *
+     * The tenant's real colors arrive via [setColorsFromApi], which only [DashboardFragment]
+     * calls. Screens reachable without the Dashboard — chat opened directly through
+     * `VihDiscover.openChat` — must still render something legible, so they call this.
+     */
+    fun ensureDefaults(context: Context) {
+        if (Color.alpha(primaryColor) != 0) return
+        loadSavedTheme(context)
     }
 
     private const val PREFS_NAME = "theme_prefs"
@@ -125,10 +145,14 @@ object DynamicThemeManager {
         appContext = context.applicationContext
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         primaryColor = prefs.getInt(KEY_PRIMARY_COLOR, getDefaultPrimaryColor(context))
+            .orDefault(getDefaultPrimaryColor(context))
         secondaryColor = prefs.getInt(KEY_SECONDARY_COLOR, getDefaultSecondaryColor(context))
+            .orDefault(getDefaultSecondaryColor(context))
         primaryTextColor = prefs.getInt(KEY_PRIMARY_TEXT_COLOR, getDefaultPrimaryTextColor(context))
+            .orDefault(getDefaultPrimaryTextColor(context))
         secondaryTextColor =
             prefs.getInt(KEY_SECONDARY_TEXT_COLOR, getDefaultSecondaryTextColor(context))
+                .orDefault(getDefaultSecondaryTextColor(context))
         headerColor = prefs.getInt(
             KEY_HEADER_COLOR,
             Color.parseColor("#FEFEFE")
@@ -139,29 +163,28 @@ object DynamicThemeManager {
         )
     }
 
-    private fun getDefaultPrimaryColor(context: Context): Int {
-        val typedValue = TypedValue()
-        context.theme.resolveAttribute(R.color.primarycolor, typedValue, true)
-        return typedValue.data
-    }
+    /**
+     * SDK brand defaults, used whenever the tenant's server colors have not been applied.
+     *
+     * These used to call `context.theme.resolveAttribute(R.color.primarycolor, …)`, which is a
+     * misuse of the API — `resolveAttribute` takes an **attr** id, not a color res id. It failed
+     * silently and left `typedValue.data` at 0, i.e. fully transparent. That never showed on the
+     * SDK's own flows because [DashboardFragment] overwrites every color from `sdk-features`
+     * before any chat screen appears, but on the host-driven path (VihDiscover.openChat straight
+     * into ChatActivity) the Dashboard never runs, so every color stayed 0 and the outgoing
+     * message bubble, its text and the send button all rendered fully transparent.
+     */
+    private fun getDefaultPrimaryColor(context: Context): Int =
+        ContextCompat.getColor(context, R.color.primarycolor)
 
-    private fun getDefaultSecondaryColor(context: Context): Int {
-        val typedValue = TypedValue()
-        context.theme.resolveAttribute(R.color.secondarycolor, typedValue, true)
-        return typedValue.data
-    }
+    private fun getDefaultSecondaryColor(context: Context): Int =
+        ContextCompat.getColor(context, R.color.secondarycolor)
 
-    private fun getDefaultPrimaryTextColor(context: Context): Int {
-        val typedValue = TypedValue()
-        context.theme.resolveAttribute(R.color.primarytextcolor, typedValue, true)
-        return typedValue.data
-    }
+    private fun getDefaultPrimaryTextColor(context: Context): Int =
+        ContextCompat.getColor(context, R.color.primarytextcolor)
 
-    private fun getDefaultSecondaryTextColor(context: Context): Int {
-        val typedValue = TypedValue()
-        context.theme.resolveAttribute(R.color.secondarytextcolor, typedValue, true)
-        return typedValue.data
-    }
+    private fun getDefaultSecondaryTextColor(context: Context): Int =
+        ContextCompat.getColor(context, R.color.secondarytextcolor)
 
     fun setColorsFromApi(
         context: Context,

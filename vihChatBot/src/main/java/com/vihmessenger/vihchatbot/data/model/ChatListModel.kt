@@ -1,5 +1,7 @@
 package com.vihmessenger.vihchatbot.data.model
 
+import com.google.gson.Gson
+import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 import java.io.Serializable
 
@@ -26,10 +28,30 @@ data class ChatListModel(
 ): Serializable
 
 
+/**
+ * `main/enterprise-details/`.
+ *
+ * `data` is deliberately a raw [JsonElement] rather than an [EnterPriseModel]: the backend
+ * reuses the same field for the failure message, so an error comes back as
+ * `{"data":"Enterprise not found","status":false,"error_code":"EC_ENTERPRISE_4041"}`. Typing it
+ * as the model made Gson throw `IllegalStateException: Expected BEGIN_OBJECT but was STRING at
+ * $.data` on every such response, which reached users as a raw-exception toast instead of a
+ * handled error.
+ */
 data class EnterpriseApiResponse(
-    @SerializedName("data") var data: EnterPriseModel,
-    @SerializedName("status") var status: Boolean
-)
+    @SerializedName("data") private val rawData: JsonElement? = null,
+    @SerializedName("status") var status: Boolean = false,
+    @SerializedName("error_code") val errorCode: String? = null,
+) {
+    /** The enterprise, or null when the server returned an error envelope. */
+    val data: EnterPriseModel?
+        get() = rawData?.takeIf { it.isJsonObject }
+            ?.let { runCatching { Gson().fromJson(it, EnterPriseModel::class.java) }.getOrNull() }
+
+    /** The server's message when [data] is absent — e.g. "Enterprise not found". */
+    val message: String?
+        get() = rawData?.takeIf { it.isJsonPrimitive }?.asString
+}
 
 data class EnterPriseModel(
     @SerializedName("id") var id: Int,

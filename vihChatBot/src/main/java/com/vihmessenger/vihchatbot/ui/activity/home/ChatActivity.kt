@@ -474,8 +474,8 @@ class ChatActivity : BaseActivity() {
         }
 
         chatViewModel.enterpriseDetails.observe(this) { response ->
-            if (response != null && response.status) {
-                val enterpriseModelFromApi = response.data
+            val enterpriseModelFromApi = response?.data
+            if (response != null && response.status && enterpriseModelFromApi != null) {
                 this.currentChannel = enterpriseModelFromApi
                 VihLog.d(TAG, "Successfully fetched and stored enterprise details: ${currentChannel?.displayNameModel?.display_name}")
                 // Re-update visibility in case the display_msg is now available
@@ -483,7 +483,10 @@ class ChatActivity : BaseActivity() {
                 // enterprise-details carries the fresh is_blacklisted_by_user flag.
                 updateBlacklistState()
             } else {
-                VihLog.e(TAG, "Failed to fetch enterprise details.")
+                // Non-fatal: the chat itself works from the intent extras. This is only the
+                // enrichment lookup, and it is expected to miss when the caller passed a
+                // `user_id` — see VihDiscover.knownEnterprises.
+                VihLog.e(TAG, "Failed to fetch enterprise details: ${response?.message ?: "no data"}")
             }
         }
 

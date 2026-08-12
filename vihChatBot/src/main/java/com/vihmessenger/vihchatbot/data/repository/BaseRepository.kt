@@ -151,10 +151,18 @@ open class BaseRepository(
                 is SocketTimeoutException -> "Connection timed out. Please try again."
                 is ConnectException -> "Failed to connect to server. Please check your internet connection."
                 is SSLException -> "Secure connection failed. Please try again later."
-                else -> e.localizedMessage ?: "An unexpected error occurred"
+                // Anything else — a Gson parse failure on an unexpected payload, say — must not
+                // be shown verbatim. [errorMessage] is toasted to the user, and
+                // "java.lang.IllegalStateException: Expected BEGIN_OBJECT but was STRING at line
+                // 1 column 10 path $.data" is not a user-facing sentence. The detail is logged.
+                else -> "Something went wrong. Please try again."
             }
 
-            VihLog.e("BaseRepository", "API Exception: ${e.javaClass.simpleName} - $errorMessage")
+            VihLog.e(
+                "BaseRepository",
+                "API Exception: ${e.javaClass.simpleName} - ${e.localizedMessage}",
+                e,
+            )
             return Results.Error(errorMessage)
         }
     }

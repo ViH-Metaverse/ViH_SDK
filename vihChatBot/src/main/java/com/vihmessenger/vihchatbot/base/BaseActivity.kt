@@ -109,6 +109,12 @@ abstract class BaseActivity : AppCompatActivity(), DynamicThemeManager.ThemeChan
 
     protected fun applyThemeAndSetupListeners() {
         if (!initialThemeApplied) {
+            // registerListener immediately pushes the current palette to onThemeChanged. On the
+            // host-driven path nothing has populated one yet — the tenant's colors are fetched by
+            // DashboardFragment, which never runs when a chat is opened straight from a host's
+            // own Discover list — so seed the SDK defaults first. Otherwise every themed surface
+            // is painted with color 0: transparent.
+            DynamicThemeManager.ensureDefaults(this)
             DynamicThemeManager.registerListener(this) // This will trigger onThemeChanged
             initialThemeApplied = true
         }

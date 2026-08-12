@@ -84,6 +84,19 @@ object VihDiscover {
     private val gson = Gson()
 
     /**
+     * Models handed out by [listEnterprises], keyed by `user_id` — the same value the host gets
+     * as [VihEnterprise.enterpriseId] and passes back to [openChat].
+     *
+     * [ChatActivity] needs the full model. When it is not given one it falls back to
+     * `main/enterprise-details/`, which is keyed by `EnterPriseModel.id` — a *different* number
+     * (BSNL is `id=29`, `user_id=10132`). Passing the `user_id` there returns
+     * `{"data":"Enterprise not found","status":false}`, which surfaced to users as a
+     * `java.lang.IllegalStateException: Expected BEGIN_OBJECT but was STRING` toast. Reusing the
+     * model the host already fetched avoids the mismatched lookup entirely.
+     */
+    private val knownEnterprises = java.util.concurrent.ConcurrentHashMap<String, EnterPriseModel>()
+
+    /**
      * Establish an authenticated session for [phone] on channel [hashcode] via the SDK's
      * passwordless phone sign-in (`account/signup-login/`), persisting the resulting tokens.
      * Call this once (e.g. when your Discover screen opens) so [listEnterprises] and [openChat]
@@ -180,6 +193,7 @@ object VihDiscover {
                 }
                 val body = response.body()
                 if (response.isSuccessful && body != null) {
+                    body.data.forEach { knownEnterprises[it.user_id] = it }
                     callback.onSuccess(body.data.map { VihEnterprise.from(it) })
                 } else {
                     callback.onError(
@@ -227,20 +241,20 @@ object VihDiscover {
         val phone = prefs.phoneNumber
         if (landOnDashboard && !phone.isNullOrBlank()) {
             // Land on the standard SDK dashboard (Discover · Chats · Settings) unless the host has
-            // already configured its own tab set. Preserve any host theme.
+            // already configured its own tab set. `copy` rather than a fresh VihConfig: building
+            // one from scratch silently reset every field it did not name, so a host that had set
+            // `security` (FLAG_SECURE) or `diagnostics` lost it the moment it called openChat.
             val existing = VihConfigStore.config
             if (existing?.navigation == null) {
-                VihConfigStore.set(
-                    VihConfig(
-                        theme = existing?.theme,
-                        navigation = VihNavigation(
-                            tabs = listOf(
-                                VihTab(VihTabId.DISCOVER),
-                                VihTab(VihTabId.CHATS),
-                                VihTab(VihTabId.SETTINGS)
-                            )
-                        )
+                val navigation = VihNavigation(
+                    tabs = listOf(
+                        VihTab(VihTabId.DISCOVER),
+                        VihTab(VihTabId.CHATS),
+                        VihTab(VihTabId.SETTINGS)
                     )
+                )
+                VihConfigStore.set(
+                    existing?.copy(navigation = navigation) ?: VihConfig(navigation = navigation)
                 )
             }
             // Push the dashboard first so it sits under the chat in the back stack.
@@ -254,7 +268,10 @@ object VihDiscover {
                 }
             )
         }
-        ChatActivity.startIntent(context, "", name, logoUrl, enterprise, enterpriseId, hashcode)
+        // Prefer whatever the caller supplied; otherwise reuse the model from listEnterprises so
+        // ChatActivity does not have to look it up by the wrong key. See [knownEnterprises].
+        val model = enterprise ?: knownEnterprises[enterpriseId]
+        ChatActivity.startIntent(context, "", name, logoUrl, model, enterpriseId, hashcode)
     }
 
     /** Convenience [openChat] overload taking a [VihEnterprise]. */
