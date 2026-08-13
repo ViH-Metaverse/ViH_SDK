@@ -1,0 +1,31 @@
+<!--
+    Voice-bot call button (chat toolbar). A headset-on-person "support agent" glyph rather
+    than a plain handset, so the action reads as "call the assistant" and is not confused
+    with the CPaaS template call button (ic_call), which keeps the generic phone icon.
+
+    fillColor is white only as a sane pre-theme default: ChatActivity.onThemeChanged tints
+    this at runtime with the channel's defaultTextColor, exactly like ic_arrow_back. Do not
+    hardcode a dark colour here — the toolbar background is themed and was dark enough to
+    swallow the old icon entirely.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Headset band + ear cups, wrapping the head. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M21,12.22C21,6.73 16.74,3 12,3c-4.69,0 -9,3.65 -9,9.28C2.4,12.62 2,13.26 2,14v2c0,1.1 0.9,2 2,2h1v-6.1c0,-3.87 3.13,-7 7,-7s7,3.13 7,7L19,19h-8v2h8c1.1,0 2,-0.9 2,-2v-1.22c0.59,-0.31 1,-0.92 1,-1.64v-2.3c0,-0.7 -0.41,-1.31 -1,-1.62z" />
+    <!-- Eyes. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M9,14m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0" />
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M15,14m-1,0a1,1 0,1 1,2 0a1,1 0,1 1,-2 0" />
+    <!-- Hair / head silhouette. -->
+    <path
+        android:fillColor="@android:color/white"
+        android:pathData="M18,11.03C17.52,8.18 15.04,6 12.05,6c-3.03,0 -6.29,2.51 -6.03,6.45c2.47,-1.01 4.33,-3.21 4.86,-5.89c1.31,2.63 4,4.44 7.12,4.47z" />
+</vector>

@@ -44,13 +44,9 @@ public struct SdkFeatureModel: Codable {
     public var consent_to_communicate: Bool
     public var collect_feedback_from_new_users: Bool
     public var user: Int
-    // Present (non-null) only when this channel has an ACTIVE voice-bot agent. The toggle
-    // `vih_features.is_voice_bot` can be on while the agent is still pending/failed, in which
-    // case this stays nil and there is nothing to call — always gate the call UI on this.
-    public var voice_bot: VoiceBot?
 
     enum CodingKeys: String, CodingKey {
-        case id, vih_features, title, voice_bot
+        case id, vih_features, title
         case chat_boat_name = "chat_bot_name"
         case chat_boat_logo = "chat_bot_logo"
         case chatboat_placement_type = "chatbot_placement_type"
@@ -72,9 +68,10 @@ public struct SdkVihFeatureModel: Codable {
     public var created_at: String
     public var updated_at: String
     public var is_nlp: Bool
-    // Feature toggle only. The agent may still be pending/failed even when this is true —
-    // gate the call UI on SdkFeatureModel.voice_bot != nil, never on this flag. Optional +
-    // defaulted so an older payload without the key still decodes.
+    // Channel-level toggle only, and NOT the call gate. Voice bots belong to the enterprise
+    // from v2 on, so the callable descriptor rides on each message (`MessageModel.voice_bot`)
+    // — the backend already folds this flag into that decision. Optional so an older payload
+    // without the key still decodes.
     public var is_voice_bot: Bool?
     public var is_metaverse: Bool
     public var is_promotional_campaign: Bool
@@ -97,28 +94,6 @@ public struct SdkVihFeatureModel: Codable {
     public var is_geo_fencing: Bool
     public var is_promotional_toll: Bool
     public var channel: Int
-}
-
-/// Live voice-bot descriptor for a channel. Arrives inside the SDK-features payload; the
-/// app connects a raw PCM WebSocket call to `wsUrl` and identifies the agent with `botKey`.
-public struct VoiceBot: Codable {
-    public var wsUrl: String?
-    public var botKey: String?
-    public var language: String?
-    public var name: String?
-    public var defaultCustomerName: String?
-
-    enum CodingKeys: String, CodingKey {
-        case wsUrl = "ws_url"
-        case botKey = "bot_key"
-        case language, name
-        case defaultCustomerName = "default_customer_name"
-    }
-
-    /// Callable only when both the socket URL and the agent id are present.
-    public var isCallable: Bool {
-        !(wsUrl?.isEmpty ?? true) && !(botKey?.isEmpty ?? true)
-    }
 }
 
 public struct IndustryResponse: Codable {

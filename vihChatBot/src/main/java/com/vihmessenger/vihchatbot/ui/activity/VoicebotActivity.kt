@@ -38,26 +38,26 @@ import com.vihmessenger.vihchatbot.utils.ScreenCapturePolicy
 import com.vihmessenger.vihchatbot.config.VihConfigStore
 
 /**
- * Voice-bot call screen.
+ * Voice-bot call screen (protocol v2).
  *
- * Transport is a raw WebSocket ([ws]) carrying JSON control frames (text) and raw PCM audio
- * (binary): 16 kHz mono s16le uplink, 24 kHz mono s16le downlink. There is no auth, no
- * multiplexing — one socket is one call. Presentation (orb / mute / speaker / hang-up) is
- * unchanged from the previous implementation.
+ * Transport is a raw WebSocket ([ws]) to the agent's permanent endpoint
+ * (`wss://…/ws/agent_<id>`, taken from the message's `voice_bot.ws_url`) carrying JSON control
+ * frames (text) and raw PCM audio (binary): 16 kHz mono s16le uplink, 24 kHz mono s16le
+ * downlink. One socket is one call. Presentation (orb / mute / speaker / hang-up) is unchanged.
  *
  * Lifecycle:
- *  1. Caller passes the channel's voice_bot ws_url + bot_key (+ caller first name, agent name).
- *  2. Request RECORD_AUDIO, then open the socket and send a `start` frame.
- *  3. On `ready`, start streaming the mic; play agent audio back gaplessly as it arrives.
- *  4. Hang-up / `call_ended` / socket close → tear everything down.
+ *  1. Caller passes the message's voice_bot ws_url (+ agent name for the title).
+ *  2. Request RECORD_AUDIO, then open the socket — the session starts on connect, there is no
+ *     start frame, no bot key and no per-call context.
+ *  3. On `ready`, start streaming the mic; play agent audio back gaplessly as it arrives
+ *     (announced by `tts_start`).
+ *  4. Hang-up / server close (`1000` after ~30 s of silence, a normal end) → tear down.
  */
 class VoicebotActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "VoicebotActivity"
         private const val EXTRA_WS_URL = "extra_ws_url"
-        private const val EXTRA_BOT_KEY = "extra_bot_key"
-        private const val EXTRA_FIRST_NAME = "extra_first_name"
         private const val EXTRA_AGENT_NAME = "extra_agent_name"
 
         // Uplink: 16 kHz mono s16le, 100 ms per frame (3,200 bytes — within the server's
@@ -69,14 +69,10 @@ class VoicebotActivity : AppCompatActivity() {
         fun startIntent(
             context: Context,
             wsUrl: String,
-            botKey: String,
-            firstName: String,
             agentName: String
         ): Intent {
             return Intent(context, VoicebotActivity::class.java).apply {
                 putExtra(EXTRA_WS_URL, wsUrl)
-                putExtra(EXTRA_BOT_KEY, botKey)
-                putExtra(EXTRA_FIRST_NAME, firstName)
                 putExtra(EXTRA_AGENT_NAME, agentName)
             }
         }
@@ -176,18 +172,15 @@ class VoicebotActivity : AppCompatActivity() {
 
     private fun connect() {
         val wsUrl = intent.getStringExtra(EXTRA_WS_URL).orEmpty()
-        val botKey = intent.getStringExtra(EXTRA_BOT_KEY).orEmpty()
-        val firstName = intent.getStringExtra(EXTRA_FIRST_NAME).orEmpty()
-        if (wsUrl.isBlank() || botKey.isBlank()) {
+        if (wsUrl.isBlank()) {
             showErrorAndFinish("Missing call details")
             return
         }
 
-        // SECURITY (VAPT F-04, CWE-319): the voice transport has no TLS and no auth — the
-        // bot key and the whole PCM conversation stream in the clear, so anyone on the path
-        // can record the call and harvest the key. Fail closed on cleartext unless the host
-        // app has explicitly accepted that risk, so the insecure path is a deliberate,
-        // auditable choice rather than a silent default. Remove once the bot serves wss://.
+        // SECURITY (VAPT F-04, CWE-319): the voice transport carries the whole PCM conversation
+        // with no auth, so on cleartext anyone on the path can record the call. v2 agent URLs are
+        // wss:// and pass this on the first branch; fail closed on anything else unless the host
+        // app has explicitly accepted the risk, so the insecure path stays a deliberate choice.
         if (!isTransportAcceptable(wsUrl)) {
             VihLog.e(TAG, "Refusing cleartext ws:// voice call — host has not opted in.")
             showErrorAndFinish("Secure voice calling is unavailable")
@@ -197,32 +190,33 @@ class VoicebotActivity : AppCompatActivity() {
         setCallAudioMode()
         startPlayback()
 
+        // v2: no start frame — the session begins on connect and the server replies `ready`.
         val req = Request.Builder().url(wsUrl).build()
         ws = client.newWebSocket(req, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                val start = JSONObject().apply {
-                    put("type", "start")
-                    put("bot", botKey)
-                    put("direction", "outbound")
-                    put("context", JSONObject().put("first_name", firstName))
-                }
-                webSocket.send(start.toString())
-            }
-
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val o = runCatching { JSONObject(text) }.getOrNull() ?: return
-                when (o.optString("type")) {
+                when (val type = o.optString("type")) {
                     "ready" -> runOnUiThread {
                         binding.tvStatus.visibility = View.GONE
                         binding.orbView.setSpeakingLevel(0.15f)
                         startCapture(webSocket)
                     }
+                    // The agent is about to speak; the binary frames that follow are its audio.
+                    // Playback is fixed at OUT_RATE, so flag a rate we can't honour rather than
+                    // silently playing it back at the wrong pitch.
+                    "tts_start" -> {
+                        val rate = o.optInt("sample_rate", OUT_RATE)
+                        if (rate != OUT_RATE) VihLog.w(TAG, "tts_start sample_rate=$rate, playing at $OUT_RATE")
+                    }
+                    "response_text" -> VihLog.d(TAG, "agent said: ${o.optString("text")}")
+                    // Not documented for this service (v2 doc §5) — handled defensively so the
+                    // cut is immediate if it does arrive.
                     "event" -> when (o.optString("name")) {
                         "barge_in" -> flushPlayback()
                         "call_ended" -> runOnUiThread { endCall(remote = true) }
                     }
                     "error" -> runOnUiThread { showBusyOrError(o.optString("message")) }
-                    // tts_chunk / *_transcript / assistant_* -> audio arrives as binary below.
+                    else -> VihLog.d(TAG, "unhandled frame type=$type")
                 }
             }
 
@@ -231,8 +225,19 @@ class VoicebotActivity : AppCompatActivity() {
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, r: Response?) {
-                VihLog.e(TAG, "ws failure", t)
-                runOnUiThread { showErrorAndFinish("Connection failed") }
+                VihLog.e(TAG, "ws failure httpCode=${r?.code}", t)
+                // 403 = unknown/expired agent id: the handshake fails and the socket never opens.
+                val message = if (r?.code == 403) "Couldn't start the call" else "Connection failed"
+                runOnUiThread { showErrorAndFinish(message) }
+            }
+
+            // The server ends the call itself — it speaks a goodbye and closes with 1000 after
+            // ~30 s of silence. OkHttp only delivers onClosed once we have also sent a close, so
+            // acknowledge here; without it a server-initiated hang-up left this screen hanging.
+            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
+                VihLog.i(TAG, "ws closing code=$code reason=$reason")
+                runCatching { webSocket.close(1000, null) }
+                runOnUiThread { endCall(remote = true) }
             }
 
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
@@ -419,7 +424,7 @@ class VoicebotActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ teardown
 
     private fun hangUp() {
-        runCatching { ws?.send(JSONObject().put("type", "end").toString()) }
+        // v2 has no application-level "end" frame — closing the socket ends the session.
         endCall(remote = false)
     }
 

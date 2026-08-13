@@ -1,27 +1,32 @@
 import UIKit
 import AVFoundation
 
-/// Voice-bot call screen. Mirrors Android `ui/activity/VoicebotActivity.kt`.
+/// Voice-bot call screen (protocol v2). Mirrors Android `ui/activity/VoicebotActivity.kt`.
 ///
-/// Transport is a raw WebSocket (`URLSessionWebSocketTask`) carrying JSON control frames
-/// (text) and raw PCM audio (binary): 16 kHz mono s16le uplink, 24 kHz mono s16le downlink.
-/// There is no auth and no multiplexing — one socket is one call. Audio capture/playback use
-/// `AVAudioEngine`; `AVAudioSession` handles speaker routing (Android's `AudioManager`).
+/// Transport is a raw WebSocket (`URLSessionWebSocketTask`) to the agent's permanent endpoint
+/// (`wss://…/ws/agent_<id>`, taken from the message's `voice_bot.ws_url`) carrying JSON control
+/// frames (text) and raw PCM audio (binary): 16 kHz mono s16le uplink, 24 kHz mono s16le
+/// downlink. One socket is one call. Audio capture/playback use `AVAudioEngine`;
+/// `AVAudioSession` handles speaker routing (Android's `AudioManager`).
 ///
 /// Lifecycle:
-///   1. Caller passes the channel's voice_bot ws_url + bot_key (+ caller first name, agent name).
-///   2. Request mic permission, open the socket, send a `start` frame.
-///   3. On `ready`, stream the mic uplink; play agent audio back gaplessly as it arrives.
-///   4. Hang-up / `call_ended` / socket close → tear everything down.
+///   1. Caller passes the message's voice_bot ws_url (+ agent name for the title).
+///   2. Request mic permission and open the socket — the session starts on connect, there is no
+///      start frame, no bot key and no per-call context.
+///   3. On `ready`, stream the mic uplink; play agent audio back gaplessly as it arrives
+///      (announced by `tts_start`).
+///   4. Hang-up / server close (`1000` after ~30 s of silence, a normal end) → tear down.
 public final class VoicebotViewController: BaseViewController {
 
     // Uplink: 16 kHz mono s16le. Downlink: 24 kHz mono s16le.
+    /// Call-screen background (#0A0A1A), shared with Android's activity_voicebot.xml. Doubles
+    /// as the glyph colour on an engaged toggle, so the chip reads as inverted, not blank.
+    private static let screenBackground = UIColor(red: 0.039, green: 0.039, blue: 0.102, alpha: 1)
+
     private static let inRate: Double = 16000
     private static let outRate: Double = 24000
 
     private let wsUrl: String
-    private let botKey: String
-    private let firstName: String
     private let agentName: String
 
     private var speakerOn = true
@@ -47,10 +52,8 @@ public final class VoicebotViewController: BaseViewController {
         commonFormat: .pcmFormatFloat32, sampleRate: 24000, channels: 1, interleaved: false
     )!
 
-    public init(wsUrl: String, botKey: String, firstName: String, agentName: String) {
+    public init(wsUrl: String, agentName: String) {
         self.wsUrl = wsUrl
-        self.botKey = botKey
-        self.firstName = firstName
         self.agentName = agentName
         super.init(nibName: nil, bundle: nil)
     }
@@ -59,7 +62,7 @@ public final class VoicebotViewController: BaseViewController {
     // MARK: - UI
 
     public override func initView() {
-        view.backgroundColor = .black
+        view.backgroundColor = Self.screenBackground
         let title = agentName.isEmpty ? "Voice Assistant" : agentName
         agentNameLabel.text = title
         agentNameLabel.textColor = .white
@@ -74,16 +77,25 @@ public final class VoicebotViewController: BaseViewController {
         orbView.translatesAutoresizingMaskIntoConstraints = false
 
         hangUpButton.setImage(UIImage(systemName: "phone.down.fill"), for: .normal)
-        hangUpButton.tintColor = .systemRed
+        hangUpButton.tintColor = .white
+        hangUpButton.backgroundColor = UIColor(red: 0.898, green: 0.224, blue: 0.208, alpha: 1) // #E53935
+        hangUpButton.layer.cornerRadius = 32   // matches the 64pt constraint below
         hangUpButton.addTarget(self, action: #selector(hangUp), for: .touchUpInside)
 
         muteButton.setImage(UIImage(systemName: "mic.fill"), for: .normal)
-        muteButton.tintColor = .white
         muteButton.addTarget(self, action: #selector(toggleMute), for: .touchUpInside)
 
         speakerButton.setImage(UIImage(systemName: "speaker.wave.2.fill"), for: .normal)
-        speakerButton.tintColor = .white
         speakerButton.addTarget(self, action: #selector(toggleSpeaker), for: .touchUpInside)
+
+        [muteButton, speakerButton].forEach { button in
+            button.layer.cornerRadius = 30
+            button.layer.borderWidth = 1
+            button.widthAnchor.constraint(equalToConstant: 60).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 60).isActive = true
+        }
+        applyToggleStyle(muteButton, active: muted)
+        applyToggleStyle(speakerButton, active: speakerOn)
 
         let topStack = UIStackView(arrangedSubviews: [agentNameLabel, statusLabel])
         topStack.axis = .vertical
@@ -117,6 +129,16 @@ public final class VoicebotViewController: BaseViewController {
         ensurePermissionAndStart()
     }
 
+    /// Active/inactive styling for the mute + speaker chips, mirroring Android's
+    /// `bg_voicebot_mute` selector: engaged = solid white pill with a dark glyph, idle =
+    /// translucent with a white glyph. A white-on-white glyph is the failure this avoids —
+    /// tinting alone left an engaged toggle unreadable against the filled circle.
+    private func applyToggleStyle(_ button: UIButton, active: Bool) {
+        button.backgroundColor = active ? .white : UIColor(white: 1, alpha: 0.2)
+        button.layer.borderColor = (active ? UIColor.clear : UIColor(white: 1, alpha: 0.4)).cgColor
+        button.tintColor = active ? Self.screenBackground : .white
+    }
+
     private func ensurePermissionAndStart() {
         AVAudioSession.sharedInstance().requestRecordPermission { [weak self] granted in
             DispatchQueue.main.async {
@@ -133,7 +155,7 @@ public final class VoicebotViewController: BaseViewController {
     // MARK: - Transport
 
     private func connect() {
-        guard !wsUrl.isEmpty, !botKey.isEmpty else {
+        guard !wsUrl.isEmpty else {
             showErrorAndFinish("Missing call details")
             return
         }
@@ -157,24 +179,8 @@ public final class VoicebotViewController: BaseViewController {
         task = socket
         socket.resume()
 
-        // Send the start frame immediately — URLSession queues it until the socket opens.
-        // `outbound` => the agent greets first (correct for tap-to-call).
-        let start: [String: Any] = [
-            "type": "start",
-            "bot": botKey,
-            "direction": "outbound",
-            "context": ["first_name": firstName]
-        ]
-        sendJSON(start)
+        // v2: no start frame — the session begins on connect and the server replies `ready`.
         receiveLoop()
-    }
-
-    private func sendJSON(_ object: [String: Any]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: object),
-              let text = String(data: data, encoding: .utf8) else { return }
-        task?.send(.string(text)) { error in
-            if let error = error { CorrelationLogger.warn(message: "ws send failed", error: error) }
-        }
     }
 
     private func receiveLoop() {
@@ -185,7 +191,7 @@ public final class VoicebotViewController: BaseViewController {
                 DispatchQueue.main.async {
                     guard !self.callEnded else { return }
                     CorrelationLogger.warn(message: "ws receive failed", error: error)
-                    self.showErrorAndFinish("Connection failed")
+                    self.handleTransportFailure()
                 }
             case .success(let message):
                 switch message {
@@ -216,12 +222,36 @@ public final class VoicebotViewController: BaseViewController {
             } else if name == "call_ended" {
                 DispatchQueue.main.async { self.endCall(remote: true) }
             }
+        case "tts_start":
+            // The agent is about to speak; the binary frames that follow are its audio.
+            // Playback is fixed at `outRate`, so flag a rate we can't honour rather than
+            // silently playing it back at the wrong pitch.
+            let rate = (obj["sample_rate"] as? Double) ?? Self.outRate
+            if rate != Self.outRate {
+                CorrelationLogger.warn(message: "tts_start sample_rate=\(rate), playing at \(Self.outRate)")
+            }
+        case "response_text":
+            CorrelationLogger.info(message: "agent said: \((obj["text"] as? String) ?? "")")
         case "error":
             let message = (obj["message"] as? String) ?? ""
             DispatchQueue.main.async { self.showBusyOrError(message) }
         default:
-            break // tts_chunk / *_transcript / assistant_* — audio arrives as binary
+            break
         }
+    }
+
+    /// The receive loop fails on both a real connection error and a normal server-initiated
+    /// close. v2 ends the call itself — it speaks a goodbye and closes with 1000 after ~30 s of
+    /// silence — so a close after the session was up is a clean end, not an error. A failure
+    /// before `ready` means the handshake never completed; 403 there is an unknown/expired
+    /// agent id.
+    private func handleTransportFailure() {
+        if task?.closeCode == .normalClosure || micActive {
+            endCall(remote: true)
+            return
+        }
+        let status = (task?.response as? HTTPURLResponse)?.statusCode
+        showErrorAndFinish(status == 403 ? "Couldn't start the call" : "Connection failed")
     }
 
     // MARK: - Audio engine
@@ -313,8 +343,8 @@ public final class VoicebotViewController: BaseViewController {
 
     @objc private func toggleMute() {
         muted.toggle()
-        muteButton.tintColor = muted ? .systemRed : .white
         muteButton.setImage(UIImage(systemName: muted ? "mic.slash.fill" : "mic.fill"), for: .normal)
+        applyToggleStyle(muteButton, active: muted)
     }
 
     @objc private func toggleSpeaker() {
@@ -324,6 +354,7 @@ public final class VoicebotViewController: BaseViewController {
             UIImage(systemName: speakerOn ? "speaker.wave.2.fill" : "speaker.slash.fill"),
             for: .normal
         )
+        applyToggleStyle(speakerButton, active: speakerOn)
     }
 
     private func setCallAudioMode() {
@@ -346,7 +377,7 @@ public final class VoicebotViewController: BaseViewController {
     // MARK: - Teardown
 
     @objc private func hangUp() {
-        sendJSON(["type": "end"]) // best-effort
+        // v2 has no application-level "end" frame — closing the socket ends the session.
         endCall(remote: false)
     }
 

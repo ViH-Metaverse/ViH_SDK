@@ -62,7 +62,8 @@
             android:contentDescription="Mute microphone"
             android:src="@drawable/ic_mic_on"
             android:scaleType="centerInside"
-            android:padding="@dimen/_14sdp" />
+            android:padding="@dimen/_14sdp"
+            app:tint="@color/voicebot_control_tint" />
 
         <View
             android:layout_width="@dimen/_36sdp"
@@ -90,7 +91,8 @@
             android:contentDescription="Toggle speaker"
             android:src="@drawable/ic_speaker_on"
             android:scaleType="centerInside"
-            android:padding="@dimen/_14sdp" />
+            android:padding="@dimen/_14sdp"
+            app:tint="@color/voicebot_control_tint" />
     </androidx.appcompat.widget.LinearLayoutCompat>
 
 </androidx.constraintlayout.widget.ConstraintLayout>

@@ -53,8 +53,8 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
     private let avatarView = UIImageView()
     private let voicebotButton = UIButton(type: .system)
 
-    /// Callable voice-bot for the open channel, resolved from that channel's SDK-features.
-    /// Nil until fetched / when the channel has no active agent — gates the call button.
+    /// Callable voice-bot for this conversation (v2): the descriptor carried by the most recent
+    /// message that has one. Nil while no message carries a voice_bot — gates the call button.
     private var voiceBot: VoiceBot?
     private let inputBar = ChatInputBar()
     /// Shown in place of [inputBar] when the user has blocked this enterprise. The backend
@@ -107,7 +107,8 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
                 updated_at: data.updated_at,
                 session: self.inputs.sessionId,
                 cpaas_json: nil,
-                interactive: data.interactive
+                interactive: data.interactive,
+                voice_bot: data.voice_bot
             ))
         })
 
@@ -124,6 +125,7 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
                     self.messages = display
                     self.tableView.reloadData()
                     self.scrollToBottom()
+                    self.refreshVoiceBotFromMessages()
                 }
             }
             self.updateEmptyVisibility()
@@ -191,12 +193,18 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
         stack.addArrangedSubview(titleLabel)
         navigationItem.titleView = stack
 
-        voicebotButton.setImage(UIImage(systemName: "phone.circle.fill"), for: .normal)
+        // Headset-on-person reads as "call the assistant"; a plain handset was too easily taken
+        // for a generic phone action. Mirrors Android's ic_voicebot_agent. The fallback keeps
+        // the button from rendering empty if the symbol is unavailable on an older OS.
+        voicebotButton.setImage(
+            UIImage(systemName: "headphones.circle.fill")
+                ?? UIImage(systemName: "phone.circle.fill"),
+            for: .normal
+        )
         voicebotButton.addTarget(self, action: #selector(launchVoicebot), for: .touchUpInside)
-        // Hidden until we confirm this channel has an active, callable voice-bot.
+        // Hidden until a message arrives carrying a callable voice-bot.
         voicebotButton.isHidden = true
         navigationItem.rightBarButtonItem = UIBarButtonItem(customView: voicebotButton)
-        resolveVoiceBot()
 
         let avatarTap = UITapGestureRecognizer(target: self, action: #selector(openCompanyProfile))
         stack.addGestureRecognizer(avatarTap)
@@ -402,6 +410,7 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
         tableView.insertRows(at: [IndexPath(row: messages.count - 1, section: 0)], with: .none)
         scrollToBottom()
         updateEmptyVisibility()
+        refreshVoiceBotFromMessages()
     }
 
     private func scrollToBottom() {
@@ -423,56 +432,23 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
         navigationController?.pushViewController(vc, animated: true)
     }
 
-    /// Fetch SDK-features for the *open* channel and show the call button only when it has an
-    /// active, callable voice-bot. Fetched per-channel because the cached `prefs.vihSettings`
-    /// is scoped to the dashboard's default channel, which may differ from the one being viewed.
-    private func resolveVoiceBot() {
-        let hashcode = inputs.hashcode?.nonBlank ?? VihChatBotSDK.shared.prefs?.hashcode
-        guard let hashcode = hashcode, !hashcode.isEmpty else { return }
-        Task { [weak self] in
-            var vb: VoiceBot?
-            do {
-                let response = try await APIClient.shared.apiService.getSdkFeatures(hashCode: hashcode)
-                if let candidate = response.data.voice_bot, candidate.isCallable {
-                    vb = candidate
-                }
-            } catch {
-                // Non-critical: on failure we simply don't show the call button.
-                vb = nil
-            }
-            let resolved = vb
-            await MainActor.run {
-                guard let self = self else { return }
-                self.voiceBot = resolved
-                self.voicebotButton.isHidden = (resolved == nil)
-            }
-        }
+    /// Voice-bot v2 gate: a conversation is callable when its messages carry a `voice_bot`, so
+    /// re-derive it from the messages currently on screen — the most recent one that has a
+    /// descriptor wins. A newly created bot makes future messages carry one; a removed bot makes
+    /// them stop, and a history reload (which replaces the list) then clears the button.
+    private func refreshVoiceBotFromMessages() {
+        let vb = messages.last(where: { $0.voice_bot?.isCallable == true })?.voice_bot
+        voiceBot = vb
+        voicebotButton.isHidden = (vb == nil)
     }
 
     @objc private func launchVoicebot() {
-        guard let vb = voiceBot, vb.isCallable,
-              let wsUrl = vb.wsUrl, let botKey = vb.botKey else { return }
-        // Caller's first name, derived from the logged-in user's full_name ("Rahul Sharma" ->
-        // "Rahul"). Empty is acceptable — the agent copes without a name.
-        let firstName = Self.callerFirstName()
-        let vc = VoicebotViewController(
-            wsUrl: wsUrl,
-            botKey: botKey,
-            firstName: firstName,
-            agentName: vb.name ?? ""
-        )
+        guard let vb = voiceBot, vb.isCallable, let wsUrl = vb.wsUrl else { return }
+        // v2 carries no per-call context: the session starts on connect, so the agent's socket
+        // URL (and its display name) is everything the call screen needs.
+        let vc = VoicebotViewController(wsUrl: wsUrl, agentName: vb.name ?? "")
         vc.modalPresentationStyle = .fullScreen
         present(vc, animated: true)
-    }
-
-    private static func callerFirstName() -> String {
-        guard let raw = VihChatBotSDK.shared.prefs?.userProfile,
-              let data = raw.data(using: .utf8),
-              let profile = try? JSONDecoder().decode(UserProfileModel.self, from: data),
-              let full = profile.full_name else { return "" }
-        return full.trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(whereSeparator: { $0 == " " || $0 == "\t" })
-            .first.map(String.init) ?? ""
     }
 
     // MARK: - UITableViewDataSource

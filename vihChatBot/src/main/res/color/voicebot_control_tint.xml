@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Icon tint for the in-call mute / speaker toggles.
+
+    bg_voicebot_mute fills the button with SOLID WHITE in the selected (active) state, but
+    ic_mic_*/ic_speaker_* are themselves white — so an engaged toggle was a white glyph on a
+    white circle, i.e. invisible. That hit the speaker button immediately, since the call
+    starts with speakerOn = true. Flip the glyph to the screen's own near-black when selected
+    so the active state reads as a filled chip.
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true" android:color="#0A0A1A" />
+    <item android:color="@android:color/white" />
+</selector>

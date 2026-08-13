@@ -37,17 +37,16 @@ data class VihSecurity(
     /**
      * Permit the voice-bot call to run over a cleartext `ws://` socket (VAPT F-04).
      *
-     * The voice-bot transport currently has no TLS terminator and no authentication: the
-     * `bot_key` and the entire PCM conversation, both directions, traverse the network
-     * unencrypted. Anyone on the path — hostile Wi-Fi, ISP, compromised router — can record
-     * the call verbatim and harvest the key, and can impersonate the bot to the user.
+     * Vestigial for the platform voice bot: v2 agents are served over `wss://`, which this
+     * flag never gated, and the SDK no longer ships a cleartext exception for the old fixed
+     * voice host. The switch survives only for a self-hosted `ws://` agent.
      *
-     * Off by default, so the SDK fails closed rather than silently transmitting plaintext
-     * voice. A partner who accepts that risk must say so explicitly in their own code,
-     * which makes the decision auditable. `wss://` URLs are always allowed and are
-     * unaffected by this flag.
-     *
-     * Remove this switch once the voice-bot is served over `wss://`.
+     * Leave it off. On a cleartext socket the entire PCM conversation traverses the network
+     * unencrypted in both directions, so anyone on the path — hostile Wi-Fi, ISP, compromised
+     * router — can record the call verbatim and impersonate the bot to the user. Off by
+     * default so the SDK fails closed; a partner who accepts that risk must say so explicitly
+     * in their own code (and add their own cleartext network-security exception), which makes
+     * the decision auditable.
      */
     val allowInsecureVoiceTransport: Boolean = false,
 )

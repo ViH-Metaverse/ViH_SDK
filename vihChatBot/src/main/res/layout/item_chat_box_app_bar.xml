@@ -71,8 +71,9 @@
             android:contentDescription="Call voice assistant"
             android:padding="8dp"
             android:scaleType="centerInside"
-            android:src="@drawable/ic_call"
-            android:visibility="gone" />
+            android:src="@drawable/ic_voicebot_agent"
+            android:visibility="gone"
+            app:tint="@android:color/white" />
 
         <TextView
             android:id="@+id/tvToolBarMain"

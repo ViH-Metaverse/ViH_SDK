@@ -40,8 +40,27 @@ data class MessageModel(
     // architecture §6.2. Nullable until the server starts emitting them.
     @SerializedName("shoot_id") var shoot_id: String? = null,
     @SerializedName("message_id") var message_id: String? = null,
-    @SerializedName("trace_id") var trace_id: String? = null
+    @SerializedName("trace_id") var trace_id: String? = null,
+    // Voice-bot v2: the callable agent for THIS message. Non-null only when the channel has
+    // voice enabled AND the sending enterprise has a live agent — the backend computes both
+    // conditions, so the app never checks `is_voice_bot` itself. See VOICE_BOT_CALL_V2 §1.
+    @SerializedName("voice_bot") var voice_bot: VoiceBot? = null
 )
+
+/**
+ * Voice-bot v2 descriptor, carried per message. The bot follows the *sending enterprise*, so a
+ * conversation is callable while its messages keep arriving with one; the app connects a raw
+ * PCM WebSocket straight to [wsUrl] (a permanent per-agent `wss://…/ws/agent_<id>` endpoint)
+ * with no start handshake.
+ */
+data class VoiceBot(
+    @SerializedName("ws_url") val wsUrl: String? = null,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("agent_id") val agentId: String? = null
+) {
+    /** The socket URL is the only thing the v2 call needs — there is no key to send. */
+    val isCallable: Boolean get() = !wsUrl.isNullOrBlank()
+}
 
 /**
  * True when this is an OTP message and should render as the dedicated OTP card

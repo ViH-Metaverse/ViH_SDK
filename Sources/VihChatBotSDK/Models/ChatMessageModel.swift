@@ -90,10 +90,15 @@ public struct MessageModel: Codable {
     public var message_id: String?
     public var trace_id: String?
 
+    /// Voice-bot v2: the callable agent for THIS message. Non-nil only when the channel has
+    /// voice enabled AND the sending enterprise has a live agent — the backend computes both
+    /// conditions, so the app never checks `is_voice_bot` itself. See VOICE_BOT_CALL_V2 §1.
+    public var voice_bot: VoiceBot?
+
     enum CodingKeys: String, CodingKey {
         case session_id, message, suggested_questions, sent_by, created_at,
              updated_at, session, cpaas_json, is_flow, template_type, source,
-             interactive, shoot_id, message_id, trace_id
+             interactive, shoot_id, message_id, trace_id, voice_bot
     }
 
     /// True when this is an OTP message and should render as the dedicated OTP card
@@ -117,7 +122,8 @@ public struct MessageModel: Codable {
         isVideo: Bool = false,
         shoot_id: String? = nil,
         message_id: String? = nil,
-        trace_id: String? = nil
+        trace_id: String? = nil,
+        voice_bot: VoiceBot? = nil
     ) {
         self.session_id = session_id
         self.message = message
@@ -135,6 +141,7 @@ public struct MessageModel: Codable {
         self.shoot_id = shoot_id
         self.message_id = message_id
         self.trace_id = trace_id
+        self.voice_bot = voice_bot
     }
 
     /// Lenient decode. The chat endpoints return this in several shapes:
@@ -175,8 +182,30 @@ public struct MessageModel: Codable {
         shoot_id = str(.shoot_id)
         message_id = str(.message_id)
         trace_id = str(.trace_id)
+        // Never let a malformed/renamed voice_bot fail the whole message — worst case the
+        // call button stays hidden.
+        voice_bot = (try? c.decodeIfPresent(VoiceBot.self, forKey: .voice_bot)) ?? nil
         isVideo = false
     }
+}
+
+/// Voice-bot v2 descriptor, carried per message. The bot follows the *sending enterprise*, so a
+/// conversation is callable while its messages keep arriving with one; the app connects a raw
+/// PCM WebSocket straight to `wsUrl` (a permanent per-agent `wss://…/ws/agent_<id>` endpoint)
+/// with no start handshake.
+public struct VoiceBot: Codable {
+    public var wsUrl: String?
+    public var name: String?
+    public var agentId: String?
+
+    enum CodingKeys: String, CodingKey {
+        case wsUrl = "ws_url"
+        case name
+        case agentId = "agent_id"
+    }
+
+    /// The socket URL is the only thing the v2 call needs — there is no key to send.
+    public var isCallable: Bool { !(wsUrl?.isEmpty ?? true) }
 }
 
 /// Optional interactive payload attached to a bot [MessageModel] by the GLM flow

@@ -65,20 +65,11 @@
     </domain-config>
 
     <!--
-        TEMPORARY carve-out for the voice-bot (VAPT F-04). The call transport is a raw ws://
-        socket on a firewall-restricted host with no TLS terminator and no authentication, so
-        the platform would otherwise block it outright.
-
-        This exemption exists only so the transport can be reached at all; it does NOT make
-        the call safe. VoicebotActivity independently refuses to open a cleartext socket
-        unless the host app sets VihSecurity.allowInsecureVoiceTransport = true, which makes
-        accepting the risk an explicit, auditable choice by the integrator rather than a
-        silent SDK default.
-
-        DELETE THIS BLOCK once the voice-bot is served over wss://.
+        The voice-bot carve-out (VAPT F-04) is gone: v2 calls connect to the per-agent
+        wss://…/ws/agent_<id> endpoint carried on each message, so cleartext is no longer
+        needed and the base-config block applies. VoicebotActivity still refuses a ws:// URL
+        unless the host sets VihSecurity.allowInsecureVoiceTransport = true — a host that
+        opts in must also permit cleartext to that domain in its own config.
     -->
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">45.195.90.244</domain>
-    </domain-config>
 
 </network-security-config>

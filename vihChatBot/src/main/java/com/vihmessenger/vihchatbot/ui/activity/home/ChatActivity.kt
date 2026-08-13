@@ -21,9 +21,11 @@ import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import android.content.res.ColorStateList
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.DrawableCompat
+import androidx.core.widget.ImageViewCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.vanniktech.emoji.EmojiPopup
@@ -113,8 +115,8 @@ class ChatActivity : BaseActivity() {
     private var sessionId: String? = null
     private var hashCodeStr: String? = null
 
-    // Callable voice-bot for the open channel, resolved from that channel's SDK-features.
-    // Null until fetched / when the channel has no active agent — gates the call button.
+    // Callable voice-bot for this conversation (v2): the descriptor carried by the most recent
+    // message that has one. Null while no message carries a voice_bot — gates the call button.
     private var voiceBot: VoiceBot? = null
 
     private var hasLoadedChats = false
@@ -221,10 +223,6 @@ class ChatActivity : BaseActivity() {
         isLaunchedFromNotification = intent.hasExtra("notification_id")
         hashCodeStr = intent.getStringExtra(AppConstants.HASHCODE_EXTRA)?.takeIf { it.isNotBlank() }
             ?: prefs.hashcode
-
-        // Resolve whether this channel has an active voice-bot so the toolbar can show the
-        // call button (gated in setObservers on the sdkFeatureLiveData result).
-        chatViewModel.fetchSdkFeatures(hashCodeStr ?: "")
 
         setRecyclerView()
 
@@ -353,22 +351,35 @@ class ChatActivity : BaseActivity() {
     private fun launchVoicebot() {
         val vb = voiceBot
         if (vb == null || !vb.isCallable) {
-            VihLog.w(TAG, "launchVoicebot: no callable voice_bot for this channel — aborting")
+            VihLog.w(TAG, "launchVoicebot: no callable voice_bot on this conversation — aborting")
             return
         }
-        // Caller's first name, derived from the logged-in user's full_name ("Rahul Sharma" ->
-        // "Rahul"). Empty is acceptable — the agent copes without a name.
-        val firstName = getProfileData()?.full_name.orEmpty()
-            .trim().split(Regex("\\s+")).firstOrNull().orEmpty()
+        // v2 carries no per-call context: the session starts on connect, so the agent's socket
+        // URL (and its display name) is everything the call screen needs.
         startActivity(
             com.vihmessenger.vihchatbot.ui.activity.VoicebotActivity.startIntent(
                 context = this,
                 wsUrl = vb.wsUrl!!,
-                botKey = vb.botKey!!,
-                firstName = firstName,
                 agentName = vb.name.orEmpty()
             )
         )
+    }
+
+    /**
+     * Voice-bot v2 gate: a conversation is callable when its messages carry a `voice_bot`, so
+     * re-derive it from the messages currently on screen — the most recent one that has a
+     * descriptor wins. A newly created bot makes future messages carry one; a removed bot makes
+     * them stop, and a history reload (which rebuilds the adapter list) then clears the button.
+     */
+    private fun refreshVoiceBotFromMessages() {
+        if (!::chatAdapter.isInitialized) return
+        val vb = chatAdapter.messageList
+            .filterIsInstance<MessageModel>()
+            .lastOrNull { it.voice_bot?.isCallable == true }
+            ?.voice_bot
+        voiceBot = vb
+        _viewBinder.chatAppBar.btnVoicebot.visibility =
+            if (vb != null) View.VISIBLE else View.GONE
     }
 
     private fun setupCustomToolbar() {
@@ -457,15 +468,6 @@ class ChatActivity : BaseActivity() {
 
     @RequiresApi(Build.VERSION_CODES.O)
     override fun setObservers() {
-        // Show the toolbar call button only when the open channel has an active, callable
-        // voice-bot. Any error / null result keeps it hidden.
-        chatViewModel.sdkFeatureLiveData.observe(this) { features ->
-            val vb = features?.voice_bot?.takeIf { it.isCallable }
-            voiceBot = vb
-            _viewBinder.chatAppBar.btnVoicebot.visibility =
-                if (vb != null) View.VISIBLE else View.GONE
-        }
-
         chatViewModel.chatMessageLiveData.observe(this) { response ->
             chatAdapter.removeProgressMessage()
             response?.data?.let { data ->
@@ -500,9 +502,11 @@ class ChatActivity : BaseActivity() {
                                 updated_at = data.updated_at ?: "",
                                 session = sessionId ?: "",
                                 cpaas_json = null,
-                                interactive = data.interactive
+                                interactive = data.interactive,
+                                voice_bot = data.voice_bot
                             )
                         )
+                        refreshVoiceBotFromMessages()
                         (_viewBinder.rvMessage.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
                             chatAdapter.itemCount - 1,
                             0
@@ -566,6 +570,7 @@ class ChatActivity : BaseActivity() {
                     msg.is_flow == 1 || isFlowAcknowledgement(msg.message)
                 }
                 chatAdapter.insertAllMessage(displayMessages)
+                refreshVoiceBotFromMessages()
 
                 if (chatAdapter.itemCount > 0) {
                     (_viewBinder.rvMessage.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(
@@ -623,6 +628,13 @@ class ChatActivity : BaseActivity() {
             DrawableCompat.setTint(mutableDrawable, defaultTextColor)
             _viewBinder.chatAppBar.ivBackArrow.setImageDrawable(mutableDrawable)
         }
+        // The call button sits on the same themed header as the back arrow, so it has to be
+        // tinted from the same colour. Its drawable used to carry a hardcoded dark grey, which
+        // on a dark header rendered it all but invisible.
+        ImageViewCompat.setImageTintList(
+            _viewBinder.chatAppBar.btnVoicebot,
+            ColorStateList.valueOf(defaultTextColor)
+        )
 
         val desiredStatusBarColorForChat = ContextCompat.getColor(this, R.color.status_bar_grey)
         updateStatusBarColor(desiredStatusBarColorForChat)
