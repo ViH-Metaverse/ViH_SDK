@@ -354,13 +354,15 @@ class ChatActivity : BaseActivity() {
             VihLog.w(TAG, "launchVoicebot: no callable voice_bot on this conversation — aborting")
             return
         }
-        // v2 carries no per-call context: the session starts on connect, so the agent's socket
-        // URL (and its display name) is everything the call screen needs.
+        // Pass the caller's name so the agent can fill a {{customer_name}} placeholder in its
+        // greeting. Sourced from the cached profile; empty is fine (the agent stays generic).
+        val customerName = getProfileData()?.full_name.orEmpty()
         startActivity(
             com.vihmessenger.vihchatbot.ui.activity.VoicebotActivity.startIntent(
                 context = this,
                 wsUrl = vb.wsUrl!!,
-                agentName = vb.name.orEmpty()
+                agentName = vb.name.orEmpty(),
+                customerName = customerName
             )
         )
     }

@@ -12,6 +12,14 @@ public struct VihEnterprise {
     public let industry: String
     public let description: String?
     public let raw: EnterPriseModel
+    /// The channel owner has blacklisted this enterprise on the current channel. Such
+    /// enterprises are *not* returned by `VihDiscover.listEnterprises` — this is only ever
+    /// `true` on models fetched with `includeBlacklisted: true`.
+    public let isBlacklistedByChannel: Bool
+    /// This user has blocked the enterprise (Block from the chat / company profile screen).
+    /// Blocked enterprises are hidden from `VihDiscover.listEnterprises` too — same escape hatch
+    /// as ``isBlacklistedByChannel`` if you want to see them.
+    public let isBlacklistedByUser: Bool
 
     init(_ m: EnterPriseModel) {
         enterpriseId = m.user_id
@@ -26,7 +34,21 @@ public struct VihEnterprise {
         industry = m.industry
         description = m.displayNameModel?.description ?? m.displayNameModel?.display_msg
         raw = m
+        isBlacklistedByChannel = m.isBlacklistedByChannel == true
+        isBlacklistedByUser = m.isBlacklistedByUser == true
     }
+}
+
+/// One page of the Discover list. ``enterprises`` holds only the enterprises **active on the
+/// channel** — both channel-blacklisted and user-blocked ones are dropped — while ``hasMore``
+/// reports whether the *backend* returned anything at all for this page. Drive pagination off
+/// ``hasMore``, never off `enterprises.isEmpty`, because a page whose entries are all blacklisted
+/// filters down to nothing while more pages still follow.
+public struct EnterprisePage {
+    public let enterprises: [VihEnterprise]
+    public let hasMore: Bool
+    /// Number of enterprises the backend returned for this page, before filtering.
+    public let rawCount: Int
 }
 
 /// Public facade for **custom / headless Discover integration** — for hosts that render the
@@ -110,19 +132,57 @@ public enum VihDiscover {
 
     /// Fetch the Discover enterprise list for channel `hashcode` — the same data the built-in
     /// Discover tab shows, as a flat `VihEnterprise` list. The endpoint is paged: request page
-    /// 1, 2, … and append until a page comes back empty. `search` and `industries`
+    /// 1, 2, … and append until the backend runs out. `search` and `industries`
     /// (comma-separated) narrow the results server-side. Requires a session (see
     /// ``prepareSession(phone:hashcode:)``).
+    ///
+    /// Only enterprises **active on this channel** are returned. The backend still sends the
+    /// blacklisted ones — `is_blacklisted_by_channel` (the channel owner blocked the enterprise
+    /// on this channel; sends rejected with 2001) and `is_blacklisted_by_user` (this user blocked
+    /// it; sends rejected with 2003) — so both are filtered out here. Because of that a page can
+    /// come back empty while further pages still hold visible results — if you paginate yourself
+    /// use ``listEnterprisesPage(hashcode:page:search:industries:includeBlacklisted:)`` and stop
+    /// on `hasMore == false`.
     public static func listEnterprises(
         hashcode: String,
         page: Int = 1,
         search: String = "",
         industries: String = ""
     ) async throws -> [VihEnterprise] {
+        try await listEnterprisesPage(
+            hashcode: hashcode, page: page, search: search, industries: industries
+        ).enterprises
+    }
+
+    /// Paging-aware variant of ``listEnterprises(hashcode:page:search:industries:)``: returns the
+    /// channel-active enterprises for `page` together with a `hasMore` flag, so a fully
+    /// blacklisted page doesn't read as the end of the list. Pass `includeBlacklisted: true` to
+    /// skip the filter and get the raw backend page (each item then carries
+    /// ``VihEnterprise/isBlacklistedByChannel`` and ``VihEnterprise/isBlacklistedByUser`` so you
+    /// can render them however you like).
+    public static func listEnterprisesPage(
+        hashcode: String,
+        page: Int = 1,
+        search: String = "",
+        industries: String = "",
+        includeBlacklisted: Bool = false
+    ) async throws -> EnterprisePage {
         let response = try await APIClient.shared.apiService.getEnterpriseDiscoverList(
             hashcode: hashcode, page: page, search: search, industries: industries
         )
-        return response.data.map { VihEnterprise($0) }
+        let raw = response.data
+        // Hide anything the user can't actually talk to: blacklisted by the channel owner (send
+        // rejected with 2001) or blocked by this user (2003). The flags are nullable server-side.
+        let visible = includeBlacklisted ? raw : raw.filter {
+            $0.isBlacklistedByChannel != true && $0.isBlacklistedByUser != true
+        }
+        return EnterprisePage(
+            enterprises: visible.map { VihEnterprise($0) },
+            // The backend paginates the UNFILTERED set, so "there may be more pages" is decided
+            // by the raw page, not by what survived the filter.
+            hasMore: !raw.isEmpty,
+            rawCount: raw.count
+        )
     }
 
     /// Completion-handler variant of ``listEnterprises(hashcode:page:search:industries:)``.

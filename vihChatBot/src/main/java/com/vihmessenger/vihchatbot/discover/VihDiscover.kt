@@ -65,6 +65,18 @@ object VihDiscover {
         val industry: String,
         val description: String?,
         val raw: EnterPriseModel,
+        /**
+         * The channel owner has blacklisted this enterprise on the current channel. Such
+         * enterprises are *not* returned by [listEnterprises] — this flag is only ever `true`
+         * on models obtained through [listEnterprisesPage] with `includeBlacklisted = true`.
+         */
+        val isBlacklistedByChannel: Boolean = false,
+        /**
+         * This user has blocked the enterprise (Block from the chat / company profile screen).
+         * Blocked enterprises are hidden from [listEnterprises] too — same escape hatch as
+         * [isBlacklistedByChannel] if you want to see them.
+         */
+        val isBlacklistedByUser: Boolean = false,
     ) : Serializable {
         companion object {
             @JvmStatic
@@ -77,9 +89,25 @@ object VihDiscover {
                 description = model.displayNameModel?.description
                     ?: model.displayNameModel?.display_msg,
                 raw = model,
+                isBlacklistedByChannel = model.is_blacklisted_by_channel == true,
+                isBlacklistedByUser = model.is_blacklisted_by_user == true,
             )
         }
     }
+
+    /**
+     * One page of the Discover list. [enterprises] holds only the enterprises that are **active
+     * on the channel** — both channel-blacklisted and user-blocked ones are dropped — while
+     * [hasMore] reports whether the *backend* returned anything at all for this page. Drive
+     * pagination off [hasMore], never off `enterprises.isEmpty()`, because a page whose entries
+     * are all blacklisted filters down to nothing while more pages still follow.
+     */
+    data class EnterprisePage(
+        val enterprises: List<VihEnterprise>,
+        val hasMore: Boolean,
+        /** Number of enterprises the backend returned for this page, before filtering. */
+        val rawCount: Int,
+    ) : Serializable
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val gson = Gson()
@@ -175,8 +203,15 @@ object VihDiscover {
     /**
      * Fetch the Discover enterprise list for channel [hashcode] — the same data the built-in
      * Discover tab shows, as a flat [VihEnterprise] list for the host to render. The endpoint is
-     * paged: request [page] 1, 2, … and append until a page comes back empty. [search] and
+     * paged: request [page] 1, 2, … and append until the backend runs out. [search] and
      * [industries] (comma-separated) narrow the results server-side.
+     *
+     * Only enterprises **active on this channel** are returned. The backend still sends the
+     * blacklisted ones — `is_blacklisted_by_channel` (the channel owner blocked the enterprise
+     * on this channel; sends rejected with 2001) and `is_blacklisted_by_user` (this user blocked
+     * it; sends rejected with 2003) — so both are filtered out here. Because of that a page can
+     * come back empty while further pages still hold visible results — use [listEnterprisesPage]
+     * if you paginate yourself, and stop on `hasMore == false`.
      *
      * Requires a session — call [prepareSession] (or launch the SDK once) first.
      */
@@ -188,6 +223,32 @@ object VihDiscover {
         search: String = "",
         industries: String = "",
         callback: Callback<List<VihEnterprise>>,
+    ) = listEnterprisesPage(
+        hashcode, page, search, industries,
+        callback = object : Callback<EnterprisePage> {
+            override fun onSuccess(result: EnterprisePage) = callback.onSuccess(result.enterprises)
+            override fun onError(error: Throwable) = callback.onError(error)
+        }
+    )
+
+    /**
+     * Paging-aware variant of [listEnterprises]: delivers the channel-active enterprises for
+     * [page] together with a [EnterprisePage.hasMore] flag so a fully-blacklisted page doesn't
+     * read as the end of the list. Pass [includeBlacklisted] `true` to skip the filter and get
+     * the raw backend page (each item then carries [VihEnterprise.isBlacklistedByChannel] and
+     * [VihEnterprise.isBlacklistedByUser] so you can render them however you like).
+     *
+     * Requires a session — call [prepareSession] (or launch the SDK once) first.
+     */
+    @JvmStatic
+    @JvmOverloads
+    fun listEnterprisesPage(
+        hashcode: String,
+        page: Int = 1,
+        search: String = "",
+        industries: String = "",
+        includeBlacklisted: Boolean = false,
+        callback: Callback<EnterprisePage>,
     ) {
         scope.launch {
             try {
@@ -198,8 +259,23 @@ object VihDiscover {
                 }
                 val body = response.body()
                 if (response.isSuccessful && body != null) {
-                    body.data.forEach { knownEnterprises[it.user_id] = it }
-                    callback.onSuccess(body.data.map { VihEnterprise.from(it) })
+                    val raw = body.data
+                    raw.forEach { knownEnterprises[it.user_id] = it }
+                    // Hide anything the user can't actually talk to: blacklisted by the channel
+                    // owner (send rejected with 2001) or blocked by this user (2003). The flags
+                    // are nullable server-side, so compare with `== true`.
+                    val visible = if (includeBlacklisted) raw else raw.filterNot {
+                        it.is_blacklisted_by_channel == true || it.is_blacklisted_by_user == true
+                    }
+                    callback.onSuccess(
+                        EnterprisePage(
+                            enterprises = visible.map { VihEnterprise.from(it) },
+                            // The backend paginates the UNFILTERED set, so "there may be more
+                            // pages" is decided by the raw page, not by what survived the filter.
+                            hasMore = raw.isNotEmpty(),
+                            rawCount = raw.size,
+                        )
+                    )
                 } else {
                     callback.onError(
                         IllegalStateException("Failed to load enterprises (HTTP ${response.code()})")

@@ -59,21 +59,27 @@ class VoicebotActivity : AppCompatActivity() {
         private const val TAG = "VoicebotActivity"
         private const val EXTRA_WS_URL = "extra_ws_url"
         private const val EXTRA_AGENT_NAME = "extra_agent_name"
+        private const val EXTRA_CUSTOMER_NAME = "extra_customer_name"
 
         // Uplink: 16 kHz mono s16le, 100 ms per frame (3,200 bytes — within the server's
-        // 3.2k–8k "sweet spot"). Downlink is 24 kHz mono s16le.
+        // 3.2k–8k "sweet spot").
         private const val IN_RATE = 16000
         private const val FRAME_BYTES = IN_RATE / 10 * 2
+        // Downlink rate is NOT fixed — the server announces it per-turn in `tts_start`
+        // (observed 16 kHz on live agents). This is only the initial default until the first
+        // tts_start; playback is rebuilt to the announced rate. See [ensurePlaybackRate].
         private const val OUT_RATE = 24000
 
         fun startIntent(
             context: Context,
             wsUrl: String,
-            agentName: String
+            agentName: String,
+            customerName: String = ""
         ): Intent {
             return Intent(context, VoicebotActivity::class.java).apply {
                 putExtra(EXTRA_WS_URL, wsUrl)
                 putExtra(EXTRA_AGENT_NAME, agentName)
+                putExtra(EXTRA_CUSTOMER_NAME, customerName)
             }
         }
     }
@@ -93,6 +99,9 @@ class VoicebotActivity : AppCompatActivity() {
     // Playback — a small queue keeps the WS reader thread free so control frames (e.g.
     // barge_in) are processed promptly rather than blocked behind AudioTrack.write.
     private var track: AudioTrack? = null
+    // The output sample rate currently backing [track]. Starts at OUT_RATE, then follows
+    // whatever each `tts_start` announces (see [ensurePlaybackRate]).
+    @Volatile private var playbackRate = OUT_RATE
     private val playbackQueue = LinkedBlockingQueue<ByteArray>()
     private var playbackThread: Thread? = null
     @Volatile private var playing = false
@@ -190,25 +199,49 @@ class VoicebotActivity : AppCompatActivity() {
         setCallAudioMode()
         startPlayback()
 
-        // v2: no start frame — the session begins on connect and the server replies `ready`.
-        val req = Request.Builder().url(wsUrl).build()
+        // The agent personalises its greeting from a {{customer_name}} placeholder. The service
+        // fills that placeholder from a `customer_name` QUERY PARAM on the socket URL — verified
+        // against a live agent (`?customer_name=Rishabh` → "Namaste Rishabh ji!"), with no
+        // unsubstituted-placeholder warning. It is NOT read from an in-band frame. Agents whose
+        // prompt has no placeholder simply ignore the extra param.
+        val customerName = intent.getStringExtra(EXTRA_CUSTOMER_NAME).orEmpty().trim()
+        val connectUrl = if (customerName.isEmpty()) wsUrl else {
+            val sep = if (wsUrl.contains("?")) "&" else "?"
+            wsUrl + sep + "customer_name=" + java.net.URLEncoder.encode(customerName, "UTF-8")
+        }
+        val req = Request.Builder().url(connectUrl).build()
         ws = client.newWebSocket(req, object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) {
+                VihLog.d(TAG, "ws open (customer_name=${customerName.ifEmpty { "-" }})")
+            }
+
             override fun onMessage(webSocket: WebSocket, text: String) {
                 val o = runCatching { JSONObject(text) }.getOrNull() ?: return
                 when (val type = o.optString("type")) {
                     "ready" -> runOnUiThread {
+                        VihLog.d(TAG, "ready -> starting mic capture")
                         binding.tvStatus.visibility = View.GONE
                         binding.orbView.setSpeakingLevel(0.15f)
                         startCapture(webSocket)
                     }
                     // The agent is about to speak; the binary frames that follow are its audio.
-                    // Playback is fixed at OUT_RATE, so flag a rate we can't honour rather than
-                    // silently playing it back at the wrong pitch.
+                    // The server announces the sample rate here and it varies per agent (16 kHz
+                    // seen live), so retune the output track to match — otherwise it plays back at
+                    // the wrong pitch/speed. This frame always precedes the audio, so the track is
+                    // correct before the first chunk arrives.
                     "tts_start" -> {
-                        val rate = o.optInt("sample_rate", OUT_RATE)
-                        if (rate != OUT_RATE) VihLog.w(TAG, "tts_start sample_rate=$rate, playing at $OUT_RATE")
+                        val rate = o.optInt("sample_rate", playbackRate)
+                        if (rate > 0) ensurePlaybackRate(rate)
                     }
                     "response_text" -> VihLog.d(TAG, "agent said: ${o.optString("text")}")
+                    // The agent has ended the session (it wrapped up the call, or hit its
+                    // inactivity timeout). End the call on the app immediately so the screen
+                    // doesn't linger waiting for the socket close that trails it. Any goodbye
+                    // line's audio has already arrived (its tts_end precedes this frame).
+                    "session_end" -> {
+                        VihLog.i(TAG, "agent ended session: ${o.optString("session_id")}")
+                        runOnUiThread { endCall(remote = true) }
+                    }
                     // Not documented for this service (v2 doc §5) — handled defensively so the
                     // cut is immediate if it does arrive.
                     "event" -> when (o.optString("name")) {
@@ -265,6 +298,7 @@ class VoicebotActivity : AppCompatActivity() {
         runCatching { NoiseSuppressor.create(rec.audioSessionId)?.enabled = true }
 
         rec.startRecording()
+        VihLog.d(TAG, "startCapture: state=${rec.state} recState=${rec.recordingState}")
         capturing = true
         captureThread = Thread {
             val buf = ByteArray(FRAME_BYTES)
@@ -293,8 +327,39 @@ class VoicebotActivity : AppCompatActivity() {
     // ------------------------------------------------------------------ playback (WS -> speaker)
 
     private fun startPlayback() {
+        buildPlaybackTrack(playbackRate)
+        playing = true
+        playbackThread = Thread {
+            while (playing) {
+                val chunk = runCatching { playbackQueue.take() }.getOrNull() ?: continue
+                if (chunk.isEmpty()) continue
+                runCatching { track?.write(chunk, 0, chunk.size) }
+            }
+        }.apply { start() }
+    }
+
+    /**
+     * Retune playback to [rate] when the server announces a new one in `tts_start`.
+     *
+     * The playback thread reads the [track] field afresh on every loop, so swapping it here is
+     * safe: we stand up the new track first, then release the old one. Called on the WS reader
+     * thread, always before the turn's audio frames arrive.
+     */
+    private fun ensurePlaybackRate(rate: Int) {
+        if (track != null && rate == playbackRate) return
+        VihLog.d(TAG, "playback rate ${playbackRate} -> $rate")
+        val old = track
+        buildPlaybackTrack(rate)
+        old?.let {
+            runCatching { it.pause() }
+            runCatching { it.flush() }
+            runCatching { it.release() }
+        }
+    }
+
+    private fun buildPlaybackTrack(rate: Int) {
         val minBuf = AudioTrack.getMinBufferSize(
-            OUT_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
+            rate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT
         )
         val newTrack = AudioTrack.Builder()
             .setAudioAttributes(
@@ -304,23 +369,15 @@ class VoicebotActivity : AppCompatActivity() {
             )
             .setAudioFormat(
                 AudioFormat.Builder()
-                    .setSampleRate(OUT_RATE)
+                    .setSampleRate(rate)
                     .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                     .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build()
             )
-            .setBufferSizeInBytes(maxOf(minBuf, OUT_RATE / 5 * 2)) // ~200 ms
+            .setBufferSizeInBytes(maxOf(minBuf, rate / 5 * 2)) // ~200 ms
             .setTransferMode(AudioTrack.MODE_STREAM).build()
         track = newTrack
+        playbackRate = rate
         newTrack.play()
-
-        playing = true
-        playbackThread = Thread {
-            while (playing) {
-                val chunk = runCatching { playbackQueue.take() }.getOrNull() ?: continue
-                if (chunk.isEmpty()) continue
-                runCatching { track?.write(chunk, 0, chunk.size) }
-            }
-        }.apply { start() }
     }
 
     private fun onAudioDown(bytes: ByteArray) {
