@@ -18,7 +18,7 @@ android {
         // AGP 8 strips VERSION_NAME/VERSION_CODE from library BuildConfig. Expose the
         // SDK version explicitly so DeviceTokenRegistrar can include it in the
         // session-registry payload (architecture §3.3).
-        buildConfigField "String", "SDK_VERSION", "\"1.2.1\""
+        buildConfigField "String", "SDK_VERSION", "\"1.2.2\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
@@ -34,13 +34,13 @@ android {
 
         prod {
             dimension "environment"
-            buildConfigField "String", "API_BASE_URL", "\"${localProps.getProperty('PROD_API_BASE_URL', 'https://api.platform.vihresearchlabs.ai/')}\""
+            buildConfigField "String", "API_BASE_URL", "\"${localProps.getProperty('PROD_API_BASE_URL', 'https://api.prod.platform.vihresearchlabs.ai/')}\""
             buildConfigField "String", "DEFAULT_HASHCODE", "\"${localProps.getProperty('PROD_DEFAULT_HASHCODE', '')}\""
             buildConfigField "String", "BUGFENDER_KEY", "\"${localProps.getProperty('BUGFENDER_KEY', '')}\""
             // Cognito (email-OTP auth) — per-environment pool config from local.properties.
             buildConfigField "String", "COGNITO_USER_POOL_ID", "\"${localProps.getProperty('PROD_COGNITO_USER_POOL_ID', '')}\""
             buildConfigField "String", "COGNITO_APP_CLIENT_ID", "\"${localProps.getProperty('PROD_COGNITO_APP_CLIENT_ID', '')}\""
-            buildConfigField "String", "COGNITO_REGION", "\"${localProps.getProperty('PROD_COGNITO_REGION', 'us-east-1')}\""
+            buildConfigField "String", "COGNITO_REGION", "\"${localProps.getProperty('PROD_COGNITO_REGION', 'ap-south-1')}\""
         }
         staging {
             dimension "environment"
@@ -206,14 +206,14 @@ afterEvaluate {
                 from components.stagingRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk-staging'
-                version = '1.2.1'   // + Discover list hides blacklisted/blocked enterprises
+                version = '1.2.2'   // + iOS: retired phone-verification API removed from the SDK surface
                 applyVihPom(pom)
             }
             prodRelease(MavenPublication) {
                 from components.prodRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk'
-                version = '1.2.1'  // + Discover list hides blacklisted/blocked enterprises
+                version = '1.2.2'  // + iOS: retired phone-verification API removed from the SDK surface
                 applyVihPom(pom)
             }
         }

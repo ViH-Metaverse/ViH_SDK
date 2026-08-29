@@ -27,13 +27,6 @@ public enum BaseAPIConstants {
     // promotional_opt_in is the INVERSE of the read flag is_promotional_message_blocked.
     public static let userChannelEnterpriseConfig = "main/user-channel-enterprise-configuration/"
 
-    // Phone verification (silent network auth + SMS OTP fallback). See
-    // docs/ios/phone-auth-backend-contract.md.
-    public static let authStart = "auth/start/"
-    public static let authFinish = "auth/finish/"
-    public static let authOtpSend = "auth/otp/send/"
-    public static let authOtpVerify = "auth/otp/verify/"
-
     /// Session-registry endpoint (architecture §3.3) mapping deviceId -> push token.
     public static let registerDeviceToken = "main/sdk-device-token/"
 }
