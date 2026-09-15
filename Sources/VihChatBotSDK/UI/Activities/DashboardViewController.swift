@@ -4,13 +4,14 @@ import Combine
 /// Mirrors `ui/activity/home/DashBoardActivity.kt`. The Android version hosts
 /// a bottom-tab structure backed by fragments (Chat list, Discover, Settings).
 /// On iOS we use `UITabBarController` directly.
-public final class DashboardViewController: UITabBarController {
+public final class DashboardViewController: UITabBarController, ThemeAware {
 
     // Retained so its async network call survives past viewDidLoad (the VM captures self weakly).
     private let profileViewModel = ProfileViewModel(loaderHost: nil)
 
     public override func viewDidLoad() {
         super.viewDidLoad()
+        VihInterfaceStyle.pin(self)
         if let tabs = VihChatBotSDK.shared.uiConfig?.navigation?.tabs, !tabs.isEmpty {
             // White-label: compose the tab bar from the host's VihTab list (order, label, icon).
             // UITabBar shows ~5 comfortably; take the first 5.
@@ -35,9 +36,11 @@ public final class DashboardViewController: UITabBarController {
             viewControllers = [chatList, discover, settings]
         }
 
-        // Brand the tab bar (selected = accent purple, matching Android's bottom nav).
-        tabBar.tintColor = DynamicThemeManager.shared.palette.primaryColor
+        // Brand the tab bar (selected = accent purple, matching Android's bottom nav). Driven
+        // by the theme manager rather than read once here: sdk-features lands after this runs, so
+        // a tenant accent used to arrive too late to reach the tab bar.
         tabBar.unselectedItemTintColor = UIColor(hex: "#828282")
+        DynamicThemeManager.shared.register(self)
         let appearance = UITabBarAppearance()
         appearance.configureWithDefaultBackground()
         tabBar.standardAppearance = appearance
@@ -56,6 +59,17 @@ public final class DashboardViewController: UITabBarController {
         }
         // Best-effort re-registration of the cached push token (post-auth retry).
         DeviceTokenRegistrar.shared.registerCachedTokenIfNeeded()
+    }
+
+    public func onThemeChanged(
+        primaryColor: UIColor,
+        secondaryColor: UIColor,
+        primaryTextColor: UIColor,
+        secondaryTextColor: UIColor,
+        headerColor: UIColor,
+        defaultTextColor: UIColor
+    ) {
+        tabBar.tintColor = primaryColor
     }
 
     /// Builds a nav-wrapped tab from a `VihTab` — mapping the id to its surface (category tabs

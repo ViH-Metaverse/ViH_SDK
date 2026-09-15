@@ -95,10 +95,18 @@ public struct MessageModel: Codable {
     /// conditions, so the app never checks `is_voice_bot` itself. See VOICE_BOT_CALL_V2 §1.
     public var voice_bot: VoiceBot?
 
+    /// Server-side row id. The backend returns chat-history in an ARBITRARY order (neither
+    /// chronological nor id-ordered), so the client must sort by this before rendering or messages
+    /// (including a flow reply and the NLP reply that land in the same second) appear shuffled and
+    /// the newest one isn't at the bottom. Monotonic with creation time; `created_at` only has
+    /// second granularity so it can't break ties. Nil only for locally-built outgoing messages,
+    /// which sort last (they are always the newest). Mirrors Android MessageModel.id.
+    public var id: Int?
+
     enum CodingKeys: String, CodingKey {
         case session_id, message, suggested_questions, sent_by, created_at,
              updated_at, session, cpaas_json, is_flow, template_type, source,
-             interactive, shoot_id, message_id, trace_id, voice_bot
+             interactive, shoot_id, message_id, trace_id, voice_bot, id
     }
 
     /// True when this is an OTP message and should render as the dedicated OTP card
@@ -123,7 +131,8 @@ public struct MessageModel: Codable {
         shoot_id: String? = nil,
         message_id: String? = nil,
         trace_id: String? = nil,
-        voice_bot: VoiceBot? = nil
+        voice_bot: VoiceBot? = nil,
+        id: Int? = nil
     ) {
         self.session_id = session_id
         self.message = message
@@ -142,6 +151,7 @@ public struct MessageModel: Codable {
         self.message_id = message_id
         self.trace_id = trace_id
         self.voice_bot = voice_bot
+        self.id = id
     }
 
     /// Lenient decode. The chat endpoints return this in several shapes:
@@ -185,6 +195,12 @@ public struct MessageModel: Codable {
         // Never let a malformed/renamed voice_bot fail the whole message — worst case the
         // call button stays hidden.
         voice_bot = (try? c.decodeIfPresent(VoiceBot.self, forKey: .voice_bot)) ?? nil
+        // Server row id (Int on the wire; tolerate a numeric String). Used to sort chat-history.
+        if let i = ((try? c.decodeIfPresent(Int.self, forKey: .id)) ?? nil) {
+            id = i
+        } else {
+            id = Int(str(.id) ?? "")
+        }
         isVideo = false
     }
 }

@@ -30,6 +30,7 @@ public final class SettingsViewController: BaseViewController {
         avatarView.layer.cornerRadius = 40
         avatarView.layer.masksToBounds = true
         avatarView.backgroundColor = .systemGray5
+        avatarView.tintColor = .secondaryLabel   // colours the fallback glyph; blue by default
         avatarView.translatesAutoresizingMaskIntoConstraints = false
 
         nameLabel.font = .systemFont(ofSize: 18, weight: .semibold)
@@ -193,7 +194,13 @@ public final class SettingsViewController: BaseViewController {
         }
         nameLabel.text = user.full_name ?? user.username ?? user.user_name
         emailLabel.text = user.email
-        ImageLoader.load(into: avatarView, url: user.user_profile_image ?? user.profile_image, placeholderName: "placeholder")
+        ImageLoader.load(
+            into: avatarView, url: user.user_profile_image ?? user.profile_image,
+            // A person, not a business: this avatar is the signed-in user's own photo.
+            placeholderName: "placeholder",
+            fallback: UIImage(systemName: "person.crop.circle.fill",
+                              withConfiguration: UIImage.SymbolConfiguration(pointSize: 48))
+        )
     }
 
     @objc private func openEdit() {

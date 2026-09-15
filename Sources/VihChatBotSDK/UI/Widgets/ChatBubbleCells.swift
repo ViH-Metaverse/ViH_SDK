@@ -53,6 +53,7 @@ public final class LeftChatCell: UITableViewCell {
         backgroundColor = .clear
         contentView.backgroundColor = .clear
 
+        // The received bubble is a light card, matching Android.
         bubble.backgroundColor = ChatStyle.receivedBubble
         bubble.layer.cornerRadius = ChatStyle.radius
         // Rounded except the bottom-left corner (mirrors chat_bubble_receiver).
@@ -201,7 +202,6 @@ public final class RightChatCell: UITableViewCell {
         backgroundColor = .clear
         contentView.backgroundColor = .clear
 
-        bubble.backgroundColor = ChatStyle.accent
         bubble.layer.cornerRadius = ChatStyle.radius
         // Rounded except the top-right corner (mirrors chat_bubble_sender).
         bubble.layer.maskedCorners = [.layerMinXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
@@ -239,6 +239,9 @@ public final class RightChatCell: UITableViewCell {
     required init?(coder: NSCoder) { fatalError("not supported") }
 
     public func configure(with message: MessageModel) {
+        // Read the accent here rather than in init: a cell created before the tenant theme
+        // arrived would otherwise keep the default purple for the rest of the session.
+        bubble.backgroundColor = ChatStyle.accent
         label.text = message.message
         timeLabel.text = ChatStyle.time(message.created_at)
     }

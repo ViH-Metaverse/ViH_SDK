@@ -6,10 +6,11 @@ import AWSPluginsCore  // AuthCognitoTokensProvider
 /// Swift mirror of Android's `CognitoEmailAuth`. Wraps Amplify Auth (Cognito) for
 /// passwordless email-OTP sign-in.
 ///
-/// Flow: `requestOtp` starts a USER_AUTH sign-in preferring the email-OTP factor (Cognito
-/// emails the code via SES); `confirmOtp` submits the code and returns the Cognito **ID
-/// token**, which the caller exchanges with the backend `account/email-login/` endpoint for
-/// the existing app-session tokens.
+/// Flow: `requestOtp` attempts a passwordless sign-up first and falls through to a USER_AUTH
+/// email-OTP sign-in for already-registered addresses (Cognito emails the code via SES) — see
+/// `requestOtp` for why that order is required; `confirmOtp` submits the code and returns the
+/// Cognito **ID token**, which the caller exchanges with the backend `account/email-login/`
+/// endpoint for the existing app-session tokens.
 ///
 /// NOTE: Not yet compiled against the Amplify Swift toolchain — verify in Xcode. Amplify
 /// must be configured once at launch via `configure(with:)` before these calls.
@@ -59,25 +60,38 @@ public enum EmailOtpAuth {
         isConfigured = true
     }
 
-    /// Requests an email OTP for `email`. Existing users get an OTP via sign-in; a brand-new
-    /// email (Cognito "user not found") is onboarded via a passwordless sign-up that also emails
-    /// an OTP. Either way the caller then shows the same code-entry screen. Mirrors Android.
+    /// Requests an email OTP for `email`.
+    ///
+    /// Sign-up is attempted FIRST, falling through to an EMAIL_OTP sign-in when Cognito reports
+    /// the address is already registered. Either way the caller then shows the same code-entry
+    /// screen. Mirrors Android's `CognitoEmailAuth.requestOtp`.
+    ///
+    /// **Why that order.** Both app clients have *prevent user existence errors* enabled, so
+    /// `signIn` for an UNREGISTERED email returns a **simulated** EMAIL_OTP challenge — plausible
+    /// delivery details and all — rather than an error. It is indistinguishable from a real
+    /// challenge, so a sign-in-first flow strands new users on the OTP screen while Cognito never
+    /// mails anything. `SignUp` is exempt from that masking (verified against both pools,
+    /// 2026-08-20): it reports `usernameExists` for a registered user, which we can branch on.
     public static func requestOtp(email: String) async throws {
         guard isConfigured else { throw APIError("Email login is not configured for this build.") }
         pendingEmail = email
         isSignUpFlow = false
         _ = try? await Amplify.Auth.signOut()
         do {
+            try await signUp(email: email)
+        } catch {
+            // Already registered → normal sign-in. Any OTHER sign-up failure (self-registration
+            // disabled, throttling, …) also falls through rather than erroring out, so returning
+            // users can still log in if the sign-up path is misconfigured.
+            isSignUpFlow = false
+            if !isUserAlreadyRegistered(error) {
+                CorrelationLogger.warn(
+                    message: "signUp failed (\(error.localizedDescription)) — falling back to sign-in"
+                )
+            }
             let options = AWSAuthSignInOptions(authFlowType: .userAuth(preferredFirstFactor: .emailOTP))
             let result = try await Amplify.Auth.signIn(username: email, options: .init(pluginOptions: options))
-            try await ensureOtpDelivered(from: result, email: email)
-        } catch {
-            // A brand-new email can't sign in ("user not found") — onboard via sign-up instead.
-            if isUserNotRegistered(error) {
-                try await signUp(email: email)
-            } else {
-                throw error
-            }
+            try await ensureOtpDelivered(from: result)
         }
     }
 
@@ -85,50 +99,70 @@ public enum EmailOtpAuth {
     /// emailing a code — `preferredFirstFactor` doesn't reliably collapse the selection step.
     /// We must explicitly select EMAIL_OTP (a second confirmSignIn) to make Cognito issue the
     /// challenge and send the code. Mirrors Android's `CognitoEmailAuth.handleSignInResult`.
-    private static func ensureOtpDelivered(from result: AuthSignInResult, email: String) async throws {
+    ///
+    /// Reaching this means `signUp` already established the email is registered, so failures are
+    /// surfaced rather than retried as a sign-up (which would loop).
+    private static func ensureOtpDelivered(from result: AuthSignInResult) async throws {
         switch result.nextStep {
+        // Matched before the OTP case: the account exists but was never verified (an earlier
+        // attempt whose OTP never arrived), so Cognito wants a sign-UP confirmation and sign-in
+        // can never complete. Re-send the verification code and finish that stalled sign-up.
+        case .confirmSignUp:
+            guard let email = pendingEmail else {
+                throw APIError("Missing email to re-send the verification code")
+            }
+            CorrelationLogger.warn(message: "Account exists but is unverified — re-sending the sign-up code")
+            isSignUpFlow = true
+            _ = try await Amplify.Auth.resendSignUpCode(for: email)
+            return
         case .confirmSignInWithOTP:
             return // code already sent — go to the OTP entry screen
         case .continueSignInWithFirstFactorSelection:
-            do {
-                let selected = try await Amplify.Auth.confirmSignIn(
-                    challengeResponse: AuthFactorType.emailOTP.challengeResponse
-                )
-                if selected.isSignedIn { return }
-                if case .confirmSignInWithOTP = selected.nextStep { return }
-                throw APIError("Verification code was not sent (step: \(selected.nextStep))")
-            } catch {
-                // "selected challenge is not available" => the email isn't registered yet.
-                if isUserNotRegistered(error) {
-                    try await signUp(email: email)
-                } else {
-                    throw error
-                }
-            }
+            let selected = try await Amplify.Auth.confirmSignIn(
+                challengeResponse: AuthFactorType.emailOTP.challengeResponse
+            )
+            if selected.isSignedIn { return }
+            if case .confirmSignInWithOTP = selected.nextStep { return }
+            throw APIError("Verification code was not sent (step: \(selected.nextStep))")
         default:
             if result.isSignedIn { return }
             throw APIError("Verification code was not sent (step: \(result.nextStep))")
         }
     }
 
-    /// Passwordless sign-up for a new `email`. Cognito emails an OTP to verify the address; the
-    /// code is later submitted via [confirmOtp] (which routes to confirmSignUp for this path).
+    /// Passwordless sign-up — the entry point of the request flow. Two outcomes: a brand-new
+    /// email → Cognito creates the user and mails the OTP; an already-registered address (whether
+    /// confirmed or not) → throws `usernameExists`, which `requestOtp` turns into a sign-in. An
+    /// unconfirmed account then surfaces as the `.confirmSignUp` step in `ensureOtpDelivered`,
+    /// which re-sends the verification code.
+    /// The code is later submitted via `confirmOtp` (which routes to confirmSignUp for this path).
     private static func signUp(email: String) async throws {
         isSignUpFlow = true
         let options = AuthSignUpRequest.Options(userAttributes: [AuthUserAttribute(.email, value: email)])
         let result = try await Amplify.Auth.signUp(username: email, password: nil, options: options)
         if result.isSignUpComplete { return }
         if case .confirmUser = result.nextStep { return } // OTP emailed for verification
+        // Nothing was mailed — throwing sends `requestOtp` down its sign-in fallback rather than
+        // stranding the user on the OTP screen.
         throw APIError("Couldn't start sign-up for this email (step: \(result.nextStep))")
     }
 
-    /// Cognito's "no such user / challenge not available" signals that the email needs sign-up.
-    private static func isUserNotRegistered(_ error: Error) -> Bool {
+    /// Cognito's "this email is already a user" signal from `signUp`, i.e. the cue to switch to
+    /// the sign-in path. Unlike the auth APIs, SignUp is NOT masked by the pool's
+    /// prevent-user-existence setting, so this is a trustworthy discriminator.
+    private static func isUserAlreadyRegistered(_ error: Error) -> Bool {
         let text = ("\(error) " + error.localizedDescription).lowercased()
-        return text.contains("not available")
-            || text.contains("usernotfound")
-            || text.contains("user does not exist")
-            || text.contains("user not found")
+        return text.contains("usernameexists") || text.contains("already exists")
+    }
+
+    /// True when a confirm call failed because the auth state machine is on the *other* path
+    /// (sign-up vs sign-in) rather than because the code was wrong. Deliberately narrow — it must
+    /// never swallow code-mismatch or expired-code errors, which are real user-facing failures.
+    private static func isWrongConfirmPath(_ error: Error) -> Bool {
+        let text = ("\(error) " + error.localizedDescription).lowercased()
+        return text.contains("invalid state")
+            || text.contains("current status is confirmed")
+            || text.contains("user cannot be confirmed")
     }
 
     /// Outcome of a silent session restore ([restoreSession]).
@@ -165,10 +199,26 @@ public enum EmailOtpAuth {
     }
 
     /// Submits the OTP `code`; on success returns the Cognito ID token. Routes to confirmSignUp
-    /// for the sign-up path, else confirmSignIn.
+    /// for the sign-up path, else confirmSignIn — and retries down the *other* path if Cognito
+    /// says the auth state doesn't match. `isSignUpFlow` is process-local, so it can legitimately
+    /// disagree with Cognito's view (the OTP screen can be restored after the app was killed, and
+    /// a resend may take a different branch than the original request).
     public static func confirmOtp(code: String) async throws -> String {
         guard isConfigured else { throw APIError("Email login is not configured for this build.") }
-        if isSignUpFlow {
+        do {
+            try await confirm(code: code, asSignUp: isSignUpFlow)
+        } catch {
+            guard isWrongConfirmPath(error) else { throw error }
+            CorrelationLogger.warn(
+                message: "confirm rejected the auth state — retrying down the other path"
+            )
+            try await confirm(code: code, asSignUp: !isSignUpFlow)
+        }
+        return try await currentIdToken()
+    }
+
+    private static func confirm(code: String, asSignUp: Bool) async throws {
+        if asSignUp {
             try await confirmSignUp(code: code)
         } else {
             let result = try await Amplify.Auth.confirmSignIn(challengeResponse: code)
@@ -176,7 +226,6 @@ public enum EmailOtpAuth {
                 throw APIError("Sign-in could not be completed")
             }
         }
-        return try await currentIdToken()
     }
 
     /// Confirms the sign-up OTP, then completes sign-in via autoSignIn so we can read the freshly

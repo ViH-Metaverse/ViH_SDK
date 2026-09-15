@@ -113,6 +113,15 @@ public struct ThemePalette {
 }
 
 public extension UIColor {
+    /// Whether text drawn on top of this colour should be dark. Tenant/server colours arrive as
+    /// fixed hex with no light/dark variant, so an adaptive `.label` on top of one is unreadable
+    /// in whichever mode doesn't happen to match — pick the foreground from luminance instead.
+    var isLightBackground: Bool {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard getRed(&r, green: &g, blue: &b, alpha: &a) else { return true }
+        return (0.299 * r + 0.587 * g + 0.114 * b) > 0.6
+    }
+
     /// Lenient hex parser. Accepts `#RRGGBB` / `#RRGGBBAA` / `RRGGBB`.
     convenience init?(hex: String?) {
         guard let hex = hex?.trimmingCharacters(in: .whitespacesAndNewlines),

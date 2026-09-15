@@ -32,7 +32,12 @@ public final class CompanyProfileViewController: BaseViewController {
         avatar.layer.cornerRadius = 48
         avatar.layer.masksToBounds = true
         avatar.translatesAutoresizingMaskIntoConstraints = false
-        ImageLoader.load(into: avatar, url: channel.display_img ?? channel.profile_picture, placeholderName: "placeholder")
+        avatar.backgroundColor = .secondarySystemBackground
+        avatar.tintColor = .secondaryLabel   // colours the fallback glyph; blue by default
+        ImageLoader.load(
+            into: avatar, url: channel.display_img ?? channel.profile_picture,
+            placeholderName: "placeholder", fallback: ImageLoader.avatarPlaceholder
+        )
 
         nameLabel.font = .systemFont(ofSize: 20, weight: .semibold)
         nameLabel.text = channel.displayNameModel?.display_name ?? channel.comp_name

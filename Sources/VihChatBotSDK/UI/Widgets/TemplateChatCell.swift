@@ -94,7 +94,6 @@ public final class TemplateChatCell: UITableViewCell, UICollectionViewDataSource
             bubble.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -4),
             bubble.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: 12),
             bubble.trailingAnchor.constraint(lessThanOrEqualTo: contentView.trailingAnchor, constant: -40),
-            bubble.widthAnchor.constraint(equalToConstant: 280),
 
             contentStack.topAnchor.constraint(equalTo: bubble.topAnchor, constant: 10),
             contentStack.bottomAnchor.constraint(equalTo: bubble.bottomAnchor, constant: -8),
@@ -104,6 +103,13 @@ public final class TemplateChatCell: UITableViewCell, UICollectionViewDataSource
             mediaOverlay.centerXAnchor.constraint(equalTo: headerImage.centerXAnchor),
             mediaOverlay.centerYAnchor.constraint(equalTo: headerImage.centerYAnchor)
         ])
+
+        // 280pt wide where there's room, but not at required priority: in a 320pt-wide container
+        // (iPad Slide Over, the narrowest split) 12 + 280 overruns the trailing inset above and
+        // the two constraints become unsatisfiable, which drops the template bubble's layout.
+        let preferredWidth = bubble.widthAnchor.constraint(equalToConstant: 280)
+        preferredWidth.priority = .defaultHigh
+        preferredWidth.isActive = true
     }
     public required init?(coder: NSCoder) { fatalError("not supported") }
 
@@ -141,8 +147,8 @@ public final class TemplateChatCell: UITableViewCell, UICollectionViewDataSource
         }
 
         // Body / footer ----------------------------------------------------------------------
-        let body = cp?.msg?.replacingOccurrences(of: "<br />", with: "\n").replacingOccurrences(of: "<br>", with: "\n")
-        msgLabel.text = (body?.isEmpty == false ? body : message.message)
+        let body = TemplateText.plain(cp?.msg)
+        msgLabel.text = body.isEmpty ? message.message : body
         msgLabel.isHidden = (msgLabel.text ?? "").isEmpty
         footerLabel.text = cp?.footer
         footerLabel.isHidden = (cp?.footer ?? "").isEmpty

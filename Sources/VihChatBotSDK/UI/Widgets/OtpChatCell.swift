@@ -31,10 +31,8 @@ public final class OtpChatCell: UITableViewCell {
 
         let accent = DynamicThemeManager.shared.palette.primaryColor
 
-        // Fixed light card (matches Android's #F3F2FE bg_otp_card). Must NOT be a translucent
-        // accent — over the dark chat background in dark mode that renders dark, and the
-        // intentionally fixed-dark body/code text (#1C2020 below) becomes invisible. Keeping the
-        // card fixed-light means the OTP stays a distinct, readable card in both themes.
+        // Matches Android's #F3F2FE bg_otp_card. Not a translucent accent: the body/code text
+        // below is fixed-dark (#1C2020) and needs a solid light card to stay readable.
         bubble.backgroundColor = UIColor(hex: "#F3F2FE") ?? accent.withAlphaComponent(0.06)
         bubble.layer.cornerRadius = 16
         bubble.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMaxXMaxYCorner]
@@ -139,9 +137,7 @@ public final class OtpChatCell: UITableViewCell {
     public func configure(with message: MessageModel) {
         // OTP body text: cpaas_json.msg (API/CPaaS OTPs) or the plain message field.
         let raw = message.cpaas_json?.msg?.isEmpty == false ? message.cpaas_json?.msg : message.message
-        let body = (raw ?? "")
-            .replacingOccurrences(of: "<br />", with: "\n")
-            .replacingOccurrences(of: "<br>", with: "\n")
+        let body = TemplateText.plain(raw)
         bodyLabel.text = body
         bodyLabel.isHidden = body.isEmpty
 

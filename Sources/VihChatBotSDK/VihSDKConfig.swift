@@ -81,12 +81,6 @@ public struct VihSDKConfig {
             "G9LNNAql897egYsabashkzUCTEJkWBzgoEtk8X/678c=",
             // Amazon Root CA 1 (backup — survives intermediate rotation, valid to 2037)
             "++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI="
-        ],
-        "api.dev.platform.vihresearchlabs.ai": [
-            // Amazon RSA 2048 M01 (current issuing intermediate)
-            "DxH4tt40L+eduF6szpY6TONlxhZhBd+pJ9wbHlQ2fuw=",
-            // Amazon Root CA 1 (backup)
-            "++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI="
         ]
     ]
 }

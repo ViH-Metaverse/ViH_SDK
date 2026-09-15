@@ -13,6 +13,7 @@ public final class IndustryFiltersBottomSheet: UIViewController, UITableViewData
 
     public override func viewDidLoad() {
         super.viewDidLoad()
+        VihInterfaceStyle.pin(self)
         view.backgroundColor = .systemBackground
         if let sheet = sheetPresentationController {
             sheet.detents = [.medium(), .large()]

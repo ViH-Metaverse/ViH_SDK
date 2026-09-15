@@ -17,6 +17,7 @@ public final class ChatItemBottomSheet: UIViewController {
 
     public override func viewDidLoad() {
         super.viewDidLoad()
+        VihInterfaceStyle.pin(self)
         view.backgroundColor = .systemBackground
         if let sheet = sheetPresentationController {
             sheet.detents = [.medium()]

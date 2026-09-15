@@ -51,11 +51,25 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
     private let backgroundImageView = UIImageView()
     private let titleLabel = UILabel()
     private let avatarView = UIImageView()
+    private let titleStack = UIStackView()
     private let voicebotButton = UIButton(type: .system)
+    /// Installed on `navigationItem` only while the conversation has a callable voice-bot —
+    /// see `refreshVoiceBotFromMessages`.
+    private var voicebotBarItem: UIBarButtonItem?
 
     /// Callable voice-bot for this conversation (v2): the descriptor carried by the most recent
     /// message that has one. Nil while no message carries a voice_bot — gates the call button.
     private var voiceBot: VoiceBot?
+
+    // Bounded poll for the async flow-builder reply. A flow send returns only an acknowledgement;
+    // the real answer is generated server-side and appears in chat-history moments later. Mirrors
+    // Android's scheduleFlowResponsePoll (MAX_FLOW_RESPONSE_POLLS × FLOW_RESPONSE_POLL_DELAY_MS).
+    private var flowPollWork: DispatchWorkItem?
+    private var flowPollAttempt = 0
+    private var flowPollStartCount = 0
+    private let maxFlowPolls = 4
+    private let flowPollDelay: TimeInterval = 2.5
+
     private let inputBar = ChatInputBar()
     /// Shown in place of [inputBar] when the user has blocked this enterprise. The backend
     /// rejects such sends with 2003, so we hide the composer rather than let the send fail
@@ -96,8 +110,13 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
             // Preserve the session id so the conversation continues even when the reply itself
             // is suppressed below.
             self.inputs.sessionId = data.session_id ?? self.inputs.sessionId
-            // Suppress flow acknowledgements: is_flow == 1 and/or a "…handled by flow" placeholder.
-            if data.is_flow == 1 || Self.isFlowAcknowledgement(data.message) { return }
+            // Flow acknowledgement (is_flow == 1 / "…handled by flow"): the real flow-builder reply
+            // is generated asynchronously and only lands in chat-history moments later. Suppress the
+            // placeholder and poll history for the actual answer (mirrors Android).
+            if data.is_flow == 1 || Self.isFlowAcknowledgement(data.message) {
+                self.scheduleFlowResponsePoll()
+                return
+            }
             self.append(MessageModel(
                 session_id: data.session_id,
                 message: data.message,
@@ -117,10 +136,13 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
             self.loadingIndicator.stopAnimating()
             if let data = response.data {
                 // Drop flow acknowledgements so a persisted "…handled by flow" placeholder
-                // doesn't reappear as a bot bubble when history reloads.
-                let display = data.filter {
-                    $0.is_flow != 1 && !Self.isFlowAcknowledgement($0.message)
-                }
+                // doesn't reappear as a bot bubble when history reloads, then sort: chat-history
+                // comes back in arbitrary order, so order by (time, server id) — otherwise a flow
+                // reply lands mid-list and scrollToBottom misses it, and the voice-bot gate reads
+                // the wrong "latest" message. Mirrors Android ChatAdapter.insertAllMessage.
+                let display = data
+                    .filter { $0.is_flow != 1 && !Self.isFlowAcknowledgement($0.message) }
+                    .sorted { Self.sortKey($0) < Self.sortKey($1) }
                 if !display.isEmpty {
                     self.messages = display
                     self.tableView.reloadData()
@@ -151,15 +173,59 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
 
     public override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        if !hasLoadedChats {
-            loadAllChats()
-            hasLoadedChats = true
-        }
+        // `navigationController` is still nil in viewDidLoad, so the bar tint is set here.
+        applyNavBarAppearance()
+        // Re-fetch on every appearance (mirrors Android onResume) so a flow reply that landed while
+        // away is picked up; only show the spinner on the first load to avoid a reload flicker.
+        loadAllChats(showLoader: !hasLoadedChats)
+        hasLoadedChats = true
     }
 
-    deinit { NotificationCenter.default.removeObserver(self) }
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        flowPollWork?.cancel()
+    }
 
-    @objc private func handleFcmMessage() { loadAllChats() }
+    @objc private func handleFcmMessage() { loadAllChats(showLoader: false) }
+
+    /// After a flow acknowledgement, re-fetch chat-history a few times until the real reply lands
+    /// (the message count grows). Mirrors Android's scheduleFlowResponsePoll — bounded so it stops
+    /// after `maxFlowPolls` attempts even if nothing arrives.
+    private func scheduleFlowResponsePoll() {
+        flowPollWork?.cancel()
+        flowPollAttempt = 0
+        flowPollStartCount = messages.count
+        flowPollTick()
+    }
+
+    private func flowPollTick() {
+        let work = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            self.flowPollAttempt += 1
+            self.loadAllChats(showLoader: false)                 // re-fetch (async → updates messages)
+            let grew = self.messages.count > self.flowPollStartCount
+            if !grew && self.flowPollAttempt < self.maxFlowPolls {
+                self.flowPollTick()
+            }
+        }
+        flowPollWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + flowPollDelay, execute: work)
+    }
+
+    /// Sort key for chat-history (returned unsorted by the backend): order by timestamp, then the
+    /// monotonic server `id` to break same-second ties (a flow reply vs the NLP reply). Local
+    /// outgoing messages (unparseable/absent time or id) sort last — they are always newest.
+    static func sortKey(_ m: MessageModel) -> (Double, Int) {
+        for f in historyDateFormatters {
+            if let d = f.date(from: m.created_at) { return (d.timeIntervalSince1970, m.id ?? Int.max) }
+        }
+        return (.greatestFiniteMagnitude, m.id ?? Int.max)
+    }
+
+    private static let historyDateFormatters: [DateFormatter] =
+        ["MMM, dd yyyy HH:mm:ss", "MMM, d yyyy HH:mm:ss"].map {
+            let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = $0; return f
+        }
 
     private func setupBackground() {
         backgroundImageView.contentMode = .scaleAspectFill
@@ -174,24 +240,50 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
     }
 
     private func setupNavBar() {
-        let stack = UIStackView()
-        stack.axis = .horizontal
-        stack.alignment = .center
-        stack.spacing = 8
+        titleStack.axis = .horizontal
+        titleStack.alignment = .center
+        titleStack.spacing = 8
+        // A nav bar sizes its title view with Auto Layout only when the view does NOT translate
+        // its autoresizing mask. Left on (the default), a stack view title reports its still-empty
+        // frame through `sizeThatFits` and the bar lays it out at zero — which is why the channel
+        // name and avatar were missing on some devices while rendering fine on a wide one.
+        titleStack.translatesAutoresizingMaskIntoConstraints = false
 
         avatarView.contentMode = .scaleAspectFill
         avatarView.layer.cornerRadius = 16
         avatarView.layer.masksToBounds = true
-        avatarView.widthAnchor.constraint(equalToConstant: 32).isActive = true
-        avatarView.heightAnchor.constraint(equalToConstant: 32).isActive = true
+        // Visible before (and without) an image: the SDK ships no bitmap placeholder, so an
+        // untinted avatar view was simply nothing at all until the download landed.
+        avatarView.backgroundColor = .secondarySystemFill
+        avatarView.tintColor = .secondaryLabel
 
         titleLabel.text = (inputs.channelName?.isEmpty == false) ? inputs.channelName : "Chat"
         titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
-        ImageLoader.load(into: avatarView, url: inputs.channelImage, placeholderName: "placeholder")
+        titleLabel.textColor = .label   // adaptive: was invisible when a light nav bar showed in dark mode
+        // The bar is narrow once the back button and the call button are in it, so let a long
+        // channel name shrink and truncate instead of being compressed out of existence.
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.adjustsFontSizeToFitWidth = true
+        titleLabel.minimumScaleFactor = 0.75
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        ImageLoader.load(
+            into: avatarView, url: inputs.channelImage,
+            placeholderName: "placeholder", fallback: ImageLoader.avatarPlaceholder
+        )
 
-        stack.addArrangedSubview(avatarView)
-        stack.addArrangedSubview(titleLabel)
-        navigationItem.titleView = stack
+        titleStack.addArrangedSubview(avatarView)
+        titleStack.addArrangedSubview(titleLabel)
+        navigationItem.titleView = titleStack
+        // Not required: a landscape (compact-height) nav bar is only ~32pt tall, and a required
+        // 32pt avatar inside it would make the title view's height unsatisfiable.
+        let avatarSize = [
+            avatarView.widthAnchor.constraint(equalToConstant: 32),
+            avatarView.heightAnchor.constraint(equalToConstant: 32)
+        ]
+        avatarSize.forEach { $0.priority = .defaultHigh }
+        NSLayoutConstraint.activate(avatarSize)
+
+        applyNavBarAppearance()
 
         // Headset-on-person reads as "call the assistant"; a plain handset was too easily taken
         // for a generic phone action. Mirrors Android's ic_voicebot_agent. The fallback keeps
@@ -201,14 +293,43 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
                 ?? UIImage(systemName: "phone.circle.fill"),
             for: .normal
         )
+        voicebotButton.tintColor = DynamicThemeManager.shared.palette.primaryColor
+        voicebotButton.translatesAutoresizingMaskIntoConstraints = false
         voicebotButton.addTarget(self, action: #selector(launchVoicebot), for: .touchUpInside)
-        // Hidden until a message arrives carrying a callable voice-bot.
-        voicebotButton.isHidden = true
-        navigationItem.rightBarButtonItem = UIBarButtonItem(customView: voicebotButton)
+        NSLayoutConstraint.activate([
+            voicebotButton.widthAnchor.constraint(equalToConstant: 32),
+            voicebotButton.heightAnchor.constraint(equalToConstant: 32)
+        ])
+        voicebotBarItem = UIBarButtonItem(customView: voicebotButton)
+        // Not installed until a message carries a callable voice-bot. Hiding the custom view
+        // instead left the bar item measured at zero width, and the bar never re-measured it when
+        // the view was un-hidden — so the call button stayed invisible.
+        navigationItem.rightBarButtonItem = nil
 
         let avatarTap = UITapGestureRecognizer(target: self, action: #selector(openCompanyProfile))
-        stack.addGestureRecognizer(avatarTap)
-        stack.isUserInteractionEnabled = true
+        titleStack.addGestureRecognizer(avatarTap)
+        titleStack.isUserInteractionEnabled = true
+    }
+
+    /// Adaptive chat nav bar, applied here rather than left to the host so a host app's global
+    /// light nav-bar appearance can't leave the `.label` title white-on-light in dark mode.
+    /// Re-applied on every appearance and on every light/dark switch: a `UIBarAppearance`
+    /// snapshots the colours it was configured with instead of re-resolving them, so a title
+    /// colour captured while the view was still trait-less stays black in dark mode.
+    private func applyNavBarAppearance() {
+        let titleColor = UIColor.label.resolvedColor(with: traitCollection)
+        let appearance = UINavigationBarAppearance()
+        appearance.configureWithDefaultBackground()
+        appearance.titleTextAttributes = [.foregroundColor: titleColor]
+        appearance.largeTitleTextAttributes = [.foregroundColor: titleColor]
+        navigationItem.standardAppearance = appearance
+        navigationItem.scrollEdgeAppearance = appearance
+        navigationItem.compactAppearance = appearance
+        // Without this the bar falls back to the host's global appearance in landscape while the
+        // message list is scrolled to the top — a light bar under a white title.
+        navigationItem.compactScrollEdgeAppearance = appearance
+        titleLabel.textColor = titleColor
+        navigationController?.navigationBar.tintColor = DynamicThemeManager.shared.palette.primaryColor
     }
 
     private func setupTableView() {
@@ -326,18 +447,25 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
         guard let raw = VihChatBotSDK.shared.prefs?.vihSettings,
               let data = raw.data(using: .utf8),
               let settings = try? JSONDecoder().decode(SdkFeatureModel.self, from: data) else {
+            emptyLabel.textColor = .label
             return
         }
         if settings.background_style == "image", !settings.choose_other_image.isEmpty {
-            ImageLoader.load(into: backgroundImageView, url: settings.choose_other_image, placeholderName: "placeholder")
+            ImageLoader.load(into: backgroundImageView, url: settings.choose_other_image)
         }
         if settings.background_style == "color", let color = UIColor(hex: settings.solid_color) {
             backgroundImageView.backgroundColor = color
+            // The tenant colour is a fixed hex with no dark variant, so an adaptive `.label` on
+            // top of it is white-on-light (or black-on-dark) half the time. Derive the foreground
+            // from the background's luminance instead.
+            emptyLabel.textColor = color.isLightBackground ? .black : .white
+        } else {
+            emptyLabel.textColor = .label
         }
     }
 
-    private func loadAllChats() {
-        loadingIndicator.startAnimating()
+    private func loadAllChats(showLoader: Bool = true) {
+        if showLoader { loadingIndicator.startAnimating() }
         updateEmptyVisibility()
         let hashcode = inputs.hashcode?.nonBlank ?? VihChatBotSDK.shared.prefs?.hashcode
         let enterpriseId = inputs.id ?? ""
@@ -359,6 +487,7 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
     private func send(text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        flowPollWork?.cancel()   // a new send supersedes any in-flight flow-reply poll
         // Blocked enterprises reject sends server-side (2003); don't append a doomed message.
         if inputs.channel?.isBlacklistedByUser == true {
             updateBlacklistState()
@@ -439,7 +568,7 @@ public final class ChatViewController: BaseViewController, UITableViewDataSource
     private func refreshVoiceBotFromMessages() {
         let vb = messages.last(where: { $0.voice_bot?.isCallable == true })?.voice_bot
         voiceBot = vb
-        voicebotButton.isHidden = (vb == nil)
+        navigationItem.rightBarButtonItem = (vb == nil) ? nil : voicebotBarItem
     }
 
     @objc private func launchVoicebot() {

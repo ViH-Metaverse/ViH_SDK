@@ -76,6 +76,10 @@ public final class DiscoverViewController: BaseViewController, UITableViewDataSo
         b.tintColor = accent
         b.backgroundColor = accent.withAlphaComponent(0.12)
         b.layer.cornerRadius = 17
+        // A bar button item's custom view has to opt into Auto Layout for these size constraints
+        // to drive its frame; with the autoresizing mask still translating they fight the frame
+        // the bar assigns and the button can end up measured at zero.
+        b.translatesAutoresizingMaskIntoConstraints = false
         b.widthAnchor.constraint(equalToConstant: 34).isActive = true
         b.heightAnchor.constraint(equalToConstant: 34).isActive = true
         b.addTarget(self, action: action, for: .touchUpInside)
@@ -173,6 +177,7 @@ public final class DiscoverChannelCell: UITableViewCell {
         logo.layer.cornerRadius = 24
         logo.layer.masksToBounds = true
         logo.backgroundColor = .secondarySystemBackground
+        logo.tintColor = .secondaryLabel   // colours the fallback glyph; blue by default
         logo.translatesAutoresizingMaskIntoConstraints = false
 
         titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
@@ -224,7 +229,7 @@ public final class DiscoverChannelCell: UITableViewCell {
 
     public override func prepareForReuse() {
         super.prepareForReuse()
-        logo.image = UIImage(named: "placeholder")
+        logo.image = ImageLoader.placeholder(named: "placeholder") ?? ImageLoader.avatarPlaceholder
         onChat = nil
     }
 
@@ -237,7 +242,8 @@ public final class DiscoverChannelCell: UITableViewCell {
         ImageLoader.load(
             into: logo,
             url: model.display_img ?? model.profile_picture ?? model.enterprise_logo ?? model.enterprise_display_img,
-            placeholderName: "placeholder"
+            placeholderName: "placeholder",
+            fallback: ImageLoader.avatarPlaceholder
         )
     }
 }

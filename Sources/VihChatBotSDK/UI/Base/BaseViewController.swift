@@ -29,6 +29,7 @@ open class BaseViewController: UIViewController, LoaderHost, ThemeAware {
 
     open override func viewDidLoad() {
         super.viewDidLoad()
+        VihInterfaceStyle.pin(self)
         view.backgroundColor = .systemBackground
         screenCapturePolicy = ScreenCapturePolicy.install(on: self)
         initViewModels()

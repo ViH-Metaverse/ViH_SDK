@@ -28,6 +28,7 @@ public final class ChatInputBar: UIView, UITextViewDelegate {
 
         textView.font = .systemFont(ofSize: 15)
         textView.backgroundColor = UIColor(hex: "#F5F5F7") ?? .secondarySystemBackground
+        textView.textColor = .label
         textView.layer.cornerRadius = 20
         textView.textContainerInset = UIEdgeInsets(top: 9, left: 14, bottom: 9, right: 14)
         textView.translatesAutoresizingMaskIntoConstraints = false

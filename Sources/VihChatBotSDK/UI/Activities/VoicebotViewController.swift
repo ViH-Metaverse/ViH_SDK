@@ -1,5 +1,6 @@
 import UIKit
 import AVFoundation
+import QuartzCore
 
 /// Voice-bot call screen (protocol v2). Mirrors Android `ui/activity/VoicebotActivity.kt`.
 ///
@@ -26,6 +27,19 @@ public final class VoicebotViewController: BaseViewController {
     private static let inRate: Double = 16000
     private static let outRate: Double = 24000
 
+    // Local barge-in (user talks over the agent). The service does not send an
+    // `event/barge_in` for this, so the cut has to be detected on the uplink.
+    //   rms      — on the int16 scale (0–32767). Room noise sits well under 500; speech into
+    //              a handset runs several thousand.
+    //   sustain  — speech must hold above the threshold this long, so a cough or one
+    //              echo-leak buffer cannot cut the agent off.
+    //   armDelay — grace period after `tts_start` before barge-in can fire, letting the
+    //              voice-processing echo canceller converge on the new output. Without it the
+    //              agent's own voice, leaking into the mic on speaker, can interrupt it.
+    private static let bargeInRMS: Double = 1800
+    private static let bargeInSustain: TimeInterval = 0.3
+    private static let bargeInArmDelay: TimeInterval = 0.4
+
     private let wsUrl: String
     private let agentName: String
 
@@ -33,6 +47,17 @@ public final class VoicebotViewController: BaseViewController {
     private var muted = false
     private var callEnded = false
     private var micActive = false
+
+    // Barge-in state. `ttsActive` brackets one agent turn (tts_start..tts_end);
+    // `bargedInTurn` latches once the user has cut in, so the REMAINDER of that turn's audio
+    // is discarded as it arrives instead of resuming mid-sentence behind the user. Cleared by
+    // the next tts_start. `voicedFor` accumulates how long the uplink has held above the
+    // threshold.
+    private var ttsActive = false
+    private var bargedInTurn = false
+    private var turnStartedAt: TimeInterval = 0
+    private var lastAudioDownAt: TimeInterval = 0
+    private var voicedFor: TimeInterval = 0
 
     private let orbView = VoicebotOrbView()
     private let statusLabel = UILabel()
@@ -48,7 +73,11 @@ public final class VoicebotViewController: BaseViewController {
     private let playerNode = AVAudioPlayerNode()
     private var captureConverter: AVAudioConverter?
     private var micTapInstalled = false
-    private let playbackFormat = AVAudioFormat(
+    // Downlink playback format. Starts at `outRate` (24 kHz) but follows whatever each
+    // `tts_start` announces — see `ensurePlaybackRate`. Playing e.g. 16 kHz audio through a
+    // fixed 24 kHz node makes the agent sound sped-up/"funny".
+    private var downlinkRate: Double = 24000
+    private var playbackFormat = AVAudioFormat(
         commonFormat: .pcmFormatFloat32, sampleRate: 24000, channels: 1, interleaved: false
     )!
 
@@ -218,18 +247,29 @@ public final class VoicebotViewController: BaseViewController {
         case "event":
             let name = obj["name"] as? String
             if name == "barge_in" {
+                // Same latch as the local detector, so the rest of the turn is dropped
+                // rather than resuming behind the user.
+                bargedInTurn = true
                 flushPlayback()
             } else if name == "call_ended" {
                 DispatchQueue.main.async { self.endCall(remote: true) }
             }
         case "tts_start":
-            // The agent is about to speak; the binary frames that follow are its audio.
-            // Playback is fixed at `outRate`, so flag a rate we can't honour rather than
-            // silently playing it back at the wrong pitch.
+            // The agent is about to speak; the binary frames that follow are its audio. Retune
+            // playback to the announced rate (mirrors Android's ensurePlaybackRate) so the voice
+            // plays at natural pitch instead of being resampled to a fixed 24 kHz.
             let rate = (obj["sample_rate"] as? Double) ?? Self.outRate
-            if rate != Self.outRate {
-                CorrelationLogger.warn(message: "tts_start sample_rate=\(rate), playing at \(Self.outRate)")
-            }
+            ensurePlaybackRate(rate)
+            // A new turn: the agent is speaking again and the previous turn's barge-in no
+            // longer applies.
+            bargedInTurn = false
+            voicedFor = 0
+            turnStartedAt = CACurrentMediaTime()
+            ttsActive = true
+        case "tts_end":
+            // End of the agent's turn. Audio already scheduled keeps playing, so
+            // `agentIsSpeaking` stays true for a short tail after this.
+            ttsActive = false
         case "response_text":
             CorrelationLogger.info(message: "agent said: \((obj["text"] as? String) ?? "")")
         case "error":
@@ -263,6 +303,22 @@ public final class VoicebotViewController: BaseViewController {
 
         // Capture: convert the hardware input format down to 16 kHz mono s16le.
         let input = engine.inputNode
+
+        // Echo cancellation + noise suppression via the voice-processing I/O unit (the iOS
+        // equivalent of Android's AcousticEchoCanceler + NoiseSuppressor), BUT with automatic
+        // gain control disabled. The `.voiceChat` session AGC was gating normal-volume speech —
+        // only shouting reached the server, which then hit its ~30 s silence VAD and dropped the
+        // call. Disabling AGC keeps quiet/normal speech audible while still cancelling the
+        // agent's own downlink from the mic. Must be set before the engine starts.
+        do {
+            try input.setVoiceProcessingEnabled(true)
+            if #available(iOS 15.0, *) {
+                input.isVoiceProcessingAGCEnabled = false
+            }
+        } catch {
+            CorrelationLogger.warn(message: "voice processing enable failed", error: error)
+        }
+
         let inputFormat = input.inputFormat(forBus: 0)
         guard let uplinkFormat = AVAudioFormat(
             commonFormat: .pcmFormatInt16, sampleRate: Self.inRate, channels: 1, interleaved: true
@@ -300,11 +356,18 @@ public final class VoicebotViewController: BaseViewController {
         // Mute streams digital silence (zeroed frames), never stops — the server's VAD must
         // keep hearing the uplink.
         let data = muted ? Data(count: byteCount) : Data(bytes: channel[0], count: byteCount)
+        if !muted {
+            detectBargeIn(samples: channel[0], count: Int(out.frameLength))
+        }
         task?.send(.data(data)) { _ in }
     }
 
     private func handleAudioDown(_ data: Data) {
         guard !callEnded, data.count >= 2 else { return }
+        // The user cut in earlier this turn: the server keeps streaming the line it had
+        // already synthesised, so drop it rather than let it resume over them.
+        guard !bargedInTurn else { return }
+        lastAudioDownAt = CACurrentMediaTime()
         let frameCount = data.count / MemoryLayout<Int16>.size
         guard let buffer = AVAudioPCMBuffer(pcmFormat: playbackFormat, frameCapacity: AVAudioFrameCount(frameCount)),
               let out = buffer.floatChannelData else { return }
@@ -317,6 +380,66 @@ public final class VoicebotViewController: BaseViewController {
         playerNode.scheduleBuffer(buffer, completionHandler: nil)
         if !playerNode.isPlaying { playerNode.play() }
         driveOrbFromAudio()
+    }
+
+    /// Retune playback when the server announces a different `sample_rate` in `tts_start`
+    /// (mirrors Android's `ensurePlaybackRate`). Reconnecting the player node so the mixer
+    /// resamples the announced rate to the hardware output restores natural pitch — otherwise
+    /// e.g. a 16 kHz turn played through the fixed 24 kHz node sounds sped-up and "funny".
+    ///
+    /// Runs on the serial WS receive thread, always before the turn's binary audio frames, so
+    /// `handleAudioDown` sees the updated `playbackFormat`. Stopping the node first clears the
+    /// previous turn's queued buffers, so the new format takes effect immediately.
+    private func ensurePlaybackRate(_ rate: Double) {
+        guard rate > 0, rate != downlinkRate else { return }
+        guard let fmt = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: 1, interleaved: false
+        ) else { return }
+        CorrelationLogger.info(message: "playback rate \(downlinkRate) -> \(rate)")
+        downlinkRate = rate
+        playbackFormat = fmt
+        playerNode.stop()
+        engine.connect(playerNode, to: engine.mainMixerNode, format: fmt)
+        playerNode.play()
+    }
+
+    /// True while the agent's voice is, or is about to be, audible. The tail covers audio
+    /// already scheduled on the player node after `tts_end`.
+    private func agentIsSpeaking() -> Bool {
+        ttsActive || (CACurrentMediaTime() - lastAudioDownAt) < 0.5
+    }
+
+    /// Local barge-in detection, run on the audio tap over the buffer being uplinked.
+    ///
+    /// The agent's service never sends `event/barge_in`, so without this the user talking over
+    /// the agent left both voices playing at once. When sustained speech is heard while the
+    /// agent holds the floor, playback is flushed and the rest of that turn is discarded.
+    ///
+    /// Deliberately conservative: a false positive silences the agent mid-sentence, which is
+    /// far more damaging than a barge-in that takes an extra buffer to register. See the
+    /// `bargeIn*` constants for the thresholds and why each exists.
+    private func detectBargeIn(samples: UnsafeMutablePointer<Int16>, count: Int) {
+        guard count > 0, agentIsSpeaking(), !bargedInTurn else { voicedFor = 0; return }
+        // Let the echo canceller settle before trusting the mic against the agent's own voice.
+        guard CACurrentMediaTime() - turnStartedAt >= Self.bargeInArmDelay else {
+            voicedFor = 0
+            return
+        }
+
+        var sum = 0.0
+        for i in 0..<count {
+            let v = Double(samples[i])
+            sum += v * v
+        }
+        guard (sum / Double(count)).squareRoot() >= Self.bargeInRMS else { voicedFor = 0; return }
+
+        voicedFor += Double(count) / Self.inRate
+        guard voicedFor >= Self.bargeInSustain else { return }
+
+        voicedFor = 0
+        bargedInTurn = true
+        CorrelationLogger.info(message: "local barge-in: user spoke over the agent")
+        DispatchQueue.main.async { self.flushPlayback() }
     }
 
     /// Barge-in: drop everything buffered/queued so the cut feels immediate.

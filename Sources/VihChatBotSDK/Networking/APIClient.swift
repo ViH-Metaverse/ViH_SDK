@@ -104,9 +104,15 @@ public final class APIClient {
         case 401: msg = BaseRepository.authFailedError
         case 403: msg = "Access denied"
         case 404: msg = "Resource not found"
+        case 408, 429: msg = "The server is busy. Please try again in a moment."
         case 413: msg = "Payload size too large"
-        case 500, 501, 502, 503: msg = "Server error, please try again later"
-        default: msg = body.isEmpty ? "Unknown error occurred" : body
+        // All 5xx (incl. 502/503/504 gateway timeouts) — never surface the proxy's raw HTML
+        // error page to the user.
+        case 500...599: msg = "The server is taking too long to respond. Please try again shortly."
+        default:
+            // Guard against non-JSON error bodies (e.g. an nginx HTML page) reaching the UI.
+            let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            msg = (trimmed.isEmpty || trimmed.hasPrefix("<")) ? "Something went wrong. Please try again." : trimmed
         }
         throw APIError(msg)
     }

@@ -120,6 +120,7 @@ public final class ChatListCell: UITableViewCell {
         avatar.layer.cornerRadius = 26
         avatar.layer.masksToBounds = true
         avatar.backgroundColor = .secondarySystemBackground
+        avatar.tintColor = .secondaryLabel   // colours the fallback glyph; blue by default
         avatar.translatesAutoresizingMaskIntoConstraints = false
 
         titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
@@ -142,7 +143,6 @@ public final class ChatListCell: UITableViewCell {
         stack.spacing = 3
         stack.translatesAutoresizingMaskIntoConstraints = false
 
-        badge.backgroundColor = DynamicThemeManager.shared.palette.primaryColor
         badge.textColor = .white
         badge.textAlignment = .center
         badge.font = .systemFont(ofSize: 11, weight: .bold)
@@ -179,6 +179,9 @@ public final class ChatListCell: UITableViewCell {
     public required init?(coder: NSCoder) { fatalError("not supported") }
 
     public func configure(with model: ChatListModel) {
+        // Read the accent here rather than in init: a cell created before the tenant theme
+        // arrived would otherwise keep the default purple for the rest of the session.
+        badge.backgroundColor = DynamicThemeManager.shared.palette.primaryColor
         titleLabel.text = model.enterprise.displayNameModel?.display_name ?? model.enterprise.comp_name
         subtitleLabel.text = model.last_message.message
         if let d = Self.inFmt.date(from: model.last_message.created_at) {
@@ -189,7 +192,8 @@ public final class ChatListCell: UITableViewCell {
         ImageLoader.load(
             into: avatar,
             url: model.enterprise.display_img ?? model.enterprise.profile_picture,
-            placeholderName: "placeholder"
+            placeholderName: "placeholder",
+            fallback: ImageLoader.avatarPlaceholder
         )
         if model.unseen_count > 0 {
             badge.text = " \(model.unseen_count) "

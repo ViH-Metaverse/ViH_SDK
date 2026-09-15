@@ -22,6 +22,7 @@ public final class VideoViewController: AVPlayerViewController {
 
     public override func viewDidLoad() {
         super.viewDidLoad()
+        VihInterfaceStyle.pin(self)
         if mediaType == .video, let url = URL(string: mediaURL) {
             player = AVPlayer(url: url)
             player?.play()
