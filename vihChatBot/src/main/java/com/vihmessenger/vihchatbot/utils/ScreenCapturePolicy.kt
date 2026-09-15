@@ -1,6 +1,7 @@
 package com.vihmessenger.vihchatbot.utils
 
 import android.app.Activity
+import android.os.Build
 import android.view.WindowManager
 import com.vihmessenger.vihchatbot.config.VihConfigStore
 
@@ -32,5 +33,25 @@ object ScreenCapturePolicy {
         } else {
             VihLog.w(TAG, "Screen-capture protection disabled by host VihConfig.")
         }
+        hideOverlayWindows(activity)
+    }
+
+    /**
+     * Hides overlay windows drawn by *other* apps while an SDK window is in the foreground
+     * (HISPL 12.6, CWE-1021).
+     *
+     * `filterTouchesWhenObscured` on the sensitive layouts discards taps that arrive through
+     * an overlay; this goes further and stops the overlay being drawn over us at all, which
+     * also defeats the purely visual half of an overlay-phishing attack — a replica login
+     * prompt rendered on top of the real chat surface.
+     *
+     * API 31+ only, and it affects only `TYPE_APPLICATION_OVERLAY` windows from other apps.
+     * System windows and the host app's own in-app views are unaffected, so a host that
+     * draws its own UI inside the SDK activity keeps working.
+     */
+    private fun hideOverlayWindows(activity: Activity) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        runCatching { activity.window.setHideOverlayWindows(true) }
+            .onFailure { VihLog.w(TAG, "setHideOverlayWindows failed: ${it.javaClass.simpleName}") }
     }
 }

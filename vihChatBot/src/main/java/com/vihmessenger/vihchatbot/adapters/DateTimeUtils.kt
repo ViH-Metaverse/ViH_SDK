@@ -1,24 +1,21 @@
 package com.vihmessenger.vihchatbot.adapters
 
+import com.vihmessenger.vihchatbot.utils.parseWireTimestamp
 import java.text.SimpleDateFormat
 import java.util.*
 
 object DateTimeUtils {
 
-    // Assume "MMM, dd yyyy HH:mm:ss" is the consistent input format
-    private val inputFormat = SimpleDateFormat("MMM, dd yyyy HH:mm:ss", Locale.getDefault())
+    // The display formats below stay on the device locale - the user reads those. The
+    // incoming timestamp is a wire format and is parsed by parseWireTimestamp, which is
+    // locale-independent; parsing it with the device locale silently failed for every
+    // September date on en-IN/en-GB devices and stamped the message with "Today".
     private val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
     private val dateOnlyFormat = SimpleDateFormat("dd MMM", Locale.getDefault())
     private val dateWithYearFormat = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
 
     fun parseDate(timestamp: String): Date {
-        return try {
-            inputFormat.parse(timestamp) ?: Date()
-        } catch (e: Exception) {
-            // Log error
-            e.printStackTrace()
-            Date() // Return current date as fallback
-        }
+        return parseWireTimestamp(timestamp) ?: Date() // Fall back to now if unreadable
     }
 
     fun parseTimestampToTime(timestamp: String): String {

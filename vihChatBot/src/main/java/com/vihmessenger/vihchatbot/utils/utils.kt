@@ -32,6 +32,7 @@ import com.vihmessenger.vihchatbot.utils.extensions.getAuthority
 import java.io.File
 import java.io.FileOutputStream
 import java.lang.reflect.Type
+import java.text.ParseException
 import java.text.SimpleDateFormat
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -53,9 +54,35 @@ fun getProfileData(): UserProfileModel? {
 }
 
 
+// Wire format the backend uses for message timestamps, e.g. "Sep, 07 2026 11:49:22".
+// Pinned to Locale.US on purpose: this is a machine format, and month abbreviations are
+// locale data. Since CLDR 42 (Android 14+) English locales other than en-US abbreviate
+// September as "Sept", so a Locale.getDefault() formatter throws on the server's "Sep"
+// for every device set to en-IN, en-GB and friends.
+private const val WIRE_TIMESTAMP_PATTERN = "MMM, dd yyyy HH:mm:ss"
+
+private fun wireTimestampFormat() = SimpleDateFormat(WIRE_TIMESTAMP_PATTERN, Locale.US)
+
+// Returns null rather than throwing, so one unreadable timestamp can never take down the
+// view binding it.
+fun parseWireTimestamp(timestamp: String?): Date? {
+    if (timestamp.isNullOrBlank()) return null
+    val dateFormat = wireTimestampFormat()
+    return try {
+        dateFormat.parse(timestamp)
+    } catch (e: ParseException) {
+        // Builds before this fix formatted in the device locale, so en-IN/en-GB devices
+        // wrote "Sept". Normalise back to the en-US abbreviation and retry.
+        try {
+            dateFormat.parse(timestamp.replaceFirst("Sept", "Sep"))
+        } catch (e: ParseException) {
+            null
+        }
+    }
+}
+
 fun parseTimestamp(timestamp: String): String? {
-    val dateFormat = SimpleDateFormat("MMM, dd yyyy HH:mm:ss", Locale.getDefault())
-    val date = dateFormat.parse(timestamp) ?: return null
+    val date = parseWireTimestamp(timestamp) ?: return null
 
     val currentCalendar = Calendar.getInstance()
     val today = currentCalendar.time
@@ -96,14 +123,12 @@ fun parseTimestamp(timestamp: String): String? {
 }
 
 fun currentDateTime(): String {
-    val dateFormat = SimpleDateFormat("MMM, dd yyyy HH:mm:ss", Locale.getDefault())
-    return dateFormat.format(Date())
+    return wireTimestampFormat().format(Date())
 }
 
 fun parseDateString(dateString: String): Long {
-    val dateFormat = SimpleDateFormat("MMM, dd yyyy HH:mm:ss", Locale.getDefault())
-    val date: Date =
-        dateFormat.parse(dateString) ?: throw IllegalArgumentException("Invalid date format")
+    val date = parseWireTimestamp(dateString)
+        ?: throw IllegalArgumentException("Invalid date format")
     return date.time
 }
 
@@ -136,8 +161,7 @@ fun getRelativeTime(timeString: String, pattern: String = "MMM, dd yyyy HH:mm:ss
         }
 
         else -> {
-            val dateFormat = SimpleDateFormat("MMM, dd yyyy HH:mm:ss", Locale.getDefault())
-            dateFormat.format(Date(time))
+            wireTimestampFormat().format(Date(time))
         }
     }
 }

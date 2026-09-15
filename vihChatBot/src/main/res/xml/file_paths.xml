@@ -35,6 +35,12 @@
         name="shared_images"
         path="images/" />
 
+    <!-- HISPL 12.4: camera capture / upload staging, moved off external storage into the
+         internal cache. See CaptureFiles.kt. -->
+    <cache-path
+        name="captures"
+        path="captures/" />
+
     <!-- Internal files for documents -->
     <files-path
         name="internal_files"

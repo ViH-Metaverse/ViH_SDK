@@ -5,10 +5,9 @@ import addFragmentWithFadeInNoStack // Assuming this handles replacement if frag
 import android.Manifest
 import android.content.Intent // Added import
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
+import com.vihmessenger.vihchatbot.utils.CaptureFiles
 import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.view.WindowManager
@@ -33,7 +32,6 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
     private var mainFragment: DashboardFragment? = null
     private var phoneNumber: String? = null
     private var hashCode: String? = null
-    private val OVERLAY_PERMISSION_REQUEST_CODE = 1234
 
     val prefs: Prefs by lazy {
         AppController.prefs!!
@@ -49,9 +47,10 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
         VihLog.d(TAG, "onCreate: Intent Action: ${intent.action}, Extras: ${intent.extras}")
         processIntentExtras(intent) // Process initial intent
 
-        // --- FIX: Call permission checks directly in onCreate ---
         checkAndRequestNotificationPermission()
-//        checkOverlayPermission() // <<< ADD THIS LINE
+
+        // HISPL 12.4: clear capture/upload files an interrupted flow left in the cache.
+        CaptureFiles.sweepStale(this)
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -104,21 +103,6 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
         }
     }
 
-    private fun checkOverlayPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(this)) {
-                // This will now correctly trigger the redirect
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
-                startActivityForResult(intent, OVERLAY_PERMISSION_REQUEST_CODE)
-            } else {
-                // Permission already granted
-                VihLog.d(TAG, "Overlay permission is already granted.")
-            }
-        }
-    }
 
     private fun setupFirebaseMessaging() {
         if (FirebaseApp.getApps(this).isEmpty()) {
@@ -241,19 +225,4 @@ class DashBoardActivity : BaseActivity(), StringCommunicator {
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == OVERLAY_PERMISSION_REQUEST_CODE) {
-            // It's good practice to check again after the user returns from settings
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                if (Settings.canDrawOverlays(this)) {
-                    VihLog.d(TAG, "onActivityResult: Overlay permission has been granted.")
-                    Toast.makeText(this, "Overlay permission granted!", Toast.LENGTH_SHORT).show()
-                } else {
-                    VihLog.w(TAG, "onActivityResult: Overlay permission was NOT granted.")
-                    Toast.makeText(this, "Overlay permission is needed for full functionality.", Toast.LENGTH_LONG).show()
-                }
-            }
-        }
-    }
 }

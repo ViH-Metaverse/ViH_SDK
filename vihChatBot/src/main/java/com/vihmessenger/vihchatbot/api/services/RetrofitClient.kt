@@ -60,14 +60,14 @@ object ApiClient {
                 "api.platform.vihresearchlabs.ai",
                 "sha256/++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI="
             )
-            // Staging — Amazon RSA 2048 M01 (issuing intermediate)
+            // HISPL 2026-09: the prod-flavour host was absent here, so a prod build pinned
+            // nothing at the OkHttp layer either. Same chain as staging (verified 2026-09-15).
             .add(
-                "api.dev.platform.vihresearchlabs.ai",
-                "sha256/DxH4tt40L+eduF6szpY6TONlxhZhBd+pJ9wbHlQ2fuw="
+                "api.prod.platform.vihresearchlabs.ai",
+                "sha256/G9LNNAql897egYsabashkzUCTEJkWBzgoEtk8X/678c="
             )
-            // Staging — Amazon Root CA 1 (backup)
             .add(
-                "api.dev.platform.vihresearchlabs.ai",
+                "api.prod.platform.vihresearchlabs.ai",
                 "sha256/++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI="
             )
             .build()

@@ -10,11 +10,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
-import android.os.Environment
 import android.provider.MediaStore
+import com.vihmessenger.vihchatbot.utils.CaptureFiles
 import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.widget.Toast
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
@@ -39,9 +40,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class EditSettingsActivity : BaseActivity() {
 
@@ -67,15 +65,22 @@ class EditSettingsActivity : BaseActivity() {
         }
     }
 
+    /**
+     * SECURITY (HISPL 12.8): the Android Photo Picker, not ACTION_PICK.
+     *
+     * The picker runs out of process and hands back a URI for the single item the user chose,
+     * so it needs no permission on any API level. The legacy ACTION_PICK flow is why the SDK
+     * declared READ_MEDIA_IMAGES — full photo-library access, inherited by every host app,
+     * to support choosing one avatar. On devices with no system picker the contract falls
+     * back to ACTION_OPEN_DOCUMENT, which is also permission-free.
+     */
     private val galleryLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.data?.let { uri ->
-                selectedImageUri = uri
-                _viewBinder.ivProfileImage.setImageURI(uri)
-                VihLog.d(TAG, "Gallery image selected: $uri")
-            }
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let {
+            selectedImageUri = it
+            _viewBinder.ivProfileImage.setImageURI(it)
+            VihLog.d(TAG, "Gallery image selected: $it")
         }
     }
 
@@ -172,6 +177,7 @@ class EditSettingsActivity : BaseActivity() {
 
         profileViewModel.createProfileLiveData.observe(this) { response ->
             ProgressBarLoader.hide()
+            clearPendingCapture()
 
             response.data?.let { profileData ->
                 prefs?.userProfile = Gson().toJson(profileData)
@@ -184,6 +190,7 @@ class EditSettingsActivity : BaseActivity() {
 
         profileViewModel.createProfileErrorLiveData.observe(this) { errorMessage ->
             ProgressBarLoader.hide()
+            clearPendingCapture()
             Toast.makeText(this, errorMessage, Toast.LENGTH_SHORT).show()
         }
     }
@@ -266,9 +273,9 @@ class EditSettingsActivity : BaseActivity() {
 
     private fun createImageFile(): File? {
         try {
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
-            return File.createTempFile("JPEG_${timeStamp}_", ".jpg", storageDir).apply {
+            // SECURITY (HISPL 12.4): internal cache, not getExternalFilesDir(). The external
+            // app directory is readable by any app holding READ_EXTERNAL_STORAGE on API 24-28.
+            return CaptureFiles.create(this).apply {
                 currentPhotoPath = absolutePath
                 VihLog.d(TAG, "Created temp file at: $absolutePath")
             }
@@ -280,8 +287,9 @@ class EditSettingsActivity : BaseActivity() {
     }
 
     private fun openGallery() {
-        val intent = Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI)
-        galleryLauncher.launch(intent)
+        galleryLauncher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
     }
 
     private fun updateProfile() {
@@ -320,6 +328,9 @@ class EditSettingsActivity : BaseActivity() {
                 imagePart =
                     MultipartBody.Part.createFormData("user_profile_image", file.name, requestFile)
                 VihLog.d(TAG, "Created MultipartBody.Part successfully")
+                // HISPL 12.4: the staged copy is consumed by the request body; drop it as soon
+                // as the call completes so an interrupted upload cannot leave it behind.
+                pendingUploadFile = file
             } catch (e: Exception) {
                 VihLog.e(TAG, "Error processing image: ${e.message}", e)
                 Toast.makeText(this, "Failed to process image: ${e.message}", Toast.LENGTH_SHORT)
@@ -329,8 +340,19 @@ class EditSettingsActivity : BaseActivity() {
         profileViewModel.updateProfileSelective(true, fieldsMap, imagePart)
     }
 
+    /** Capture/upload file staged for the in-flight profile update, cleaned up on completion. */
+    private var pendingUploadFile: File? = null
+
+    /** HISPL 12.4: clear staged capture files once the profile update settles, either way. */
+    private fun clearPendingCapture() {
+        CaptureFiles.delete(pendingUploadFile)
+        pendingUploadFile = null
+        currentPhotoPath?.let { CaptureFiles.delete(File(it)) }
+        currentPhotoPath = null
+    }
+
     private fun createTempFileFromInputStream(inputStream: InputStream?): File {
-        val file = File.createTempFile("IMAGE_", ".jpg", cacheDir)
+        val file = CaptureFiles.create(this, prefix = "IMAGE_")
 
         inputStream?.use { input ->
             val bitmap = BitmapFactory.decodeStream(input)

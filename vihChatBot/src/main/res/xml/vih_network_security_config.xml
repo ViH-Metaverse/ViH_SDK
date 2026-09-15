@@ -35,9 +35,17 @@
         </trust-anchors>
     </debug-overrides>
 
-    <!-- Production API -->
+    <!--
+        VIH API — staging and production.
+
+        HISPL 2026-09: the production host was previously unpinned at the platform layer
+        (only the staging host was listed here), so a prod-flavour build got platform trust
+        for its own API. Both are pinned now. Verified against the live chains 2026-09-15:
+        leaf → Amazon RSA 2048 M04 → Amazon Root CA 1 (both hosts).
+    -->
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="false">api.platform.vihresearchlabs.ai</domain>
+        <domain includeSubdomains="false">api.prod.platform.vihresearchlabs.ai</domain>
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
@@ -50,16 +58,32 @@
         </pin-set>
     </domain-config>
 
-    <!-- Staging API -->
+    <!--
+        HISPL 12.1 (S-1) — Cognito email-OTP sign-in.
+
+        AppController.initAmplify() configures the Amplify Cognito plugin, which carries its
+        own HTTP client and never passes through ApiClient's OkHttp. Certificate pinning in
+        RetrofitClient therefore does not reach this traffic, and until now no pin-set
+        covered it either: the auth exchange (email address + OTP challenge) validated
+        against plain platform trust and was readable to anyone able to plant a CA on the
+        device. The network security config is the only place this host can be pinned.
+
+        Staging runs us-east-1, production ap-south-1. Verified 2026-09-15:
+        us-east-1  → Amazon RSA 2048 M01 → Amazon Root CA 1
+        ap-south-1 → Amazon RSA 2048 M04 → Amazon Root CA 1
+    -->
     <domain-config cleartextTrafficPermitted="false">
-        <domain includeSubdomains="false">api.dev.platform.vihresearchlabs.ai</domain>
+        <domain includeSubdomains="true">cognito-idp.us-east-1.amazonaws.com</domain>
+        <domain includeSubdomains="true">cognito-idp.ap-south-1.amazonaws.com</domain>
         <trust-anchors>
             <certificates src="system" />
         </trust-anchors>
         <pin-set expiration="2030-08-23">
-            <!-- Amazon RSA 2048 M01 (issuing intermediate) -->
+            <!-- Amazon RSA 2048 M01 (us-east-1 issuing intermediate) -->
             <pin digest="SHA-256">DxH4tt40L+eduF6szpY6TONlxhZhBd+pJ9wbHlQ2fuw=</pin>
-            <!-- Amazon Root CA 1 (backup) -->
+            <!-- Amazon RSA 2048 M04 (ap-south-1 issuing intermediate) -->
+            <pin digest="SHA-256">G9LNNAql897egYsabashkzUCTEJkWBzgoEtk8X/678c=</pin>
+            <!-- Amazon Root CA 1 (backup, valid to 2037) -->
             <pin digest="SHA-256">++MBgDH5WGvL9Bcn5Be30cRcL0f5O+NyoXuWtQdX1aI=</pin>
         </pin-set>
     </domain-config>

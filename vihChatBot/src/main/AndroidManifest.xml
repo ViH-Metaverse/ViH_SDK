@@ -2,17 +2,39 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.CAMERA" />
     <!-- SECURITY: Removed READ_PRIVILEGED_PHONE_STATE (system-only permission, never grantable to third-party apps) -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
-        android:maxSdkVersion="32" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
+
+    <!--
+        HISPL 12.5 / 12.8 / 12.9 — storage and media permissions removed.
+
+        They existed for two flows that no longer need them: camera capture now writes to the
+        internal cache (CaptureFiles) instead of getExternalFilesDir(), and image selection now
+        uses the Android Photo Picker instead of ACTION_PICK. Both are permission-free on every
+        API level.
+
+        The tools:node="remove" guards are deliberate. These are library manifests: a
+        transitive dependency that declares any of these would otherwise merge it straight back
+        into every host app, silently re-adding a permission each integrator has to justify in
+        their own Play Data safety declaration.
+    -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" tools:node="remove" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!--
+        HISPL 12.6 — SYSTEM_ALERT_WINDOW removed.
+
+        It was declared for the floating chat widget (OverlayService), but that feature has no
+        live entry point: nothing in the SDK or the demo app calls startService/
+        startForegroundService for it, and DashBoardActivity's checkOverlayPermission() call
+        was commented out. The permission was therefore inherited by every host app embedding
+        this AAR — and flagged in their store reviews — to support a code path no user could
+        reach. Re-declaring it requires re-enabling the feature and reviewing it for
+        tapjacking first.
+    -->
 
     <!-- Voicebot (LiveKit) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -121,11 +143,11 @@
             </intent-filter>
         </receiver>
 
-        <service
-            android:name=".services.OverlayService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="remoteMessaging" />
+        <!--
+            HISPL 12.6: OverlayService declaration removed along with SYSTEM_ALERT_WINDOW.
+            The class is retained in the source tree (services/OverlayService.kt) but is
+            unreachable without this entry, so it cannot start. See the note above.
+        -->
     </application>
 
 </manifest>
