@@ -17,7 +17,9 @@ import android.media.audiofx.NoiseSuppressor
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
+import android.os.SystemClock
 import android.os.Looper
+import com.vihmessenger.vihchatbot.utils.BargeInDetector
 import com.vihmessenger.vihchatbot.utils.VihLog
 import android.view.View
 import android.view.WindowManager
@@ -105,6 +107,15 @@ class VoicebotActivity : AppCompatActivity() {
     private val playbackQueue = LinkedBlockingQueue<ByteArray>()
     private var playbackThread: Thread? = null
     @Volatile private var playing = false
+
+    // Barge-in state. [ttsActive] brackets one agent turn (tts_start..tts_end); [bargedInTurn]
+    // latches once the user has cut in, so the REMAINDER of that turn's audio is discarded as
+    // it arrives instead of resuming mid-sentence behind the user. Cleared by the next
+    // tts_start.
+    @Volatile private var ttsActive = false
+    @Volatile private var bargedInTurn = false
+    @Volatile private var turnStartedAt = 0L
+    private val bargeInDetector = BargeInDetector(sampleRate = IN_RATE)
 
     private var speakerOn = true
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -232,7 +243,16 @@ class VoicebotActivity : AppCompatActivity() {
                     "tts_start" -> {
                         val rate = o.optInt("sample_rate", playbackRate)
                         if (rate > 0) ensurePlaybackRate(rate)
+                        // A new turn: the agent is speaking again and the previous turn's
+                        // barge-in no longer applies.
+                        bargedInTurn = false
+                        bargeInDetector.reset()
+                        turnStartedAt = SystemClock.elapsedRealtime()
+                        ttsActive = true
                     }
+                    // End of the agent's turn. Audio already queued keeps playing, so
+                    // [agentIsSpeaking] stays true until the queue drains.
+                    "tts_end" -> ttsActive = false
                     "response_text" -> VihLog.d(TAG, "agent said: ${o.optString("text")}")
                     // The agent has ended the session (it wrapped up the call, or hit its
                     // inactivity timeout). End the call on the app immediately so the screen
@@ -245,7 +265,12 @@ class VoicebotActivity : AppCompatActivity() {
                     // Not documented for this service (v2 doc §5) — handled defensively so the
                     // cut is immediate if it does arrive.
                     "event" -> when (o.optString("name")) {
-                        "barge_in" -> flushPlayback()
+                        "barge_in" -> {
+                            // Same latch as the local detector, so the rest of the turn is
+                            // dropped rather than resuming behind the user.
+                            bargedInTurn = true
+                            flushPlayback()
+                        }
                         "call_ended" -> runOnUiThread { endCall(remote = true) }
                     }
                     "error" -> runOnUiThread { showBusyOrError(o.optString("message")) }
@@ -309,6 +334,7 @@ class VoicebotActivity : AppCompatActivity() {
                 // Stream continuously, INCLUDING silence — the server's VAD needs it. Mute
                 // sends zeroed frames, never stops.
                 val frame = if (muted) silence else buf.copyOf(n)
+                if (!muted) detectBargeIn(buf, n)
                 runCatching { webSocket.send(ByteString.of(*frame)) }
             }
         }.apply { start() }
@@ -382,6 +408,9 @@ class VoicebotActivity : AppCompatActivity() {
 
     private fun onAudioDown(bytes: ByteArray) {
         if (!playing) return
+        // The user cut in earlier this turn: the server keeps streaming the line it had
+        // already synthesised, so drop it rather than let it resume over them.
+        if (bargedInTurn) return
         playbackQueue.offer(bytes)
         // Drive the orb from live audio: pulse while the agent speaks, decay to idle shortly
         // after the last chunk.
@@ -390,6 +419,30 @@ class VoicebotActivity : AppCompatActivity() {
             mainHandler.removeCallbacks(orbIdleRunnable)
             mainHandler.postDelayed(orbIdleRunnable, 250)
         }
+    }
+
+    /** True while the agent's voice is, or is about to be, audible. */
+    private fun agentIsSpeaking(): Boolean = ttsActive || playbackQueue.isNotEmpty()
+
+    /**
+     * Local barge-in, run on the capture thread over the frame being uplinked.
+     *
+     * The agent service never sends `event/barge_in`, so without this the user talking over
+     * the agent left both voices playing at once. Thresholds and their rationale live in
+     * [BargeInDetector]; on a hit, playback is flushed and the rest of the turn discarded.
+     */
+    private fun detectBargeIn(buf: ByteArray, n: Int) {
+        if (bargedInTurn) return
+        val fired = bargeInDetector.offer(
+            buf = buf,
+            length = n,
+            agentSpeaking = agentIsSpeaking(),
+            msSinceTurnStart = SystemClock.elapsedRealtime() - turnStartedAt
+        )
+        if (!fired) return
+        bargedInTurn = true
+        VihLog.d(TAG, "local barge-in: user spoke over the agent")
+        flushPlayback()
     }
 
     /** Barge-in: drop everything buffered/queued so the cut feels immediate. */

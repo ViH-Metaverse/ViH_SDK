@@ -30,6 +30,7 @@ import com.vihmessenger.vihchatbot.databinding.ItemRightChatBinding
 import com.vihmessenger.vihchatbot.listener.onItemChatClickListener
 import java.util.regex.Pattern
 import com.vihmessenger.vihchatbot.utils.SecureClipboard
+import com.vihmessenger.vihchatbot.utils.TemplateText
 
 class ChatAdapter(
     var context: Context,
@@ -359,7 +360,7 @@ class ChatAdapter(
 
         fun bind(message: MessageModel) {
             val raw = message.cpaas_json?.msg?.takeIf { it.isNotEmpty() } ?: message.message
-            val body = raw.replace("<br />", "\n").replace("<br>", "\n")
+            val body = TemplateText.plain(raw)
             binding.tvOtpBody.text = body
             binding.tvOtpBody.visibility = if (body.isBlank()) View.GONE else View.VISIBLE
 

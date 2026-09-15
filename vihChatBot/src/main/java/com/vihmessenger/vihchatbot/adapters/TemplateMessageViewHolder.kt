@@ -12,7 +12,6 @@ import android.view.View
 import android.widget.ImageView
 import android.widget.Toast
 import androidx.annotation.RequiresApi
-import androidx.core.text.HtmlCompat
 import androidx.core.widget.ImageViewCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -22,6 +21,7 @@ import com.vihmessenger.vihchatbot.data.model.MessageModel
 import com.vihmessenger.vihchatbot.databinding.ItemChatTemplateBinding
 import com.vihmessenger.vihchatbot.listener.onItemChatClickListener
 import com.vihmessenger.vihchatbot.utils.DynamicThemeManager
+import com.vihmessenger.vihchatbot.utils.TemplateText
 import com.vihmessenger.vihchatbot.utils.getProfileData
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -93,8 +93,7 @@ class TemplateMessageViewHolder(
 
 
             val cpaasData = message.cpaas_json ?: return
-            tvHeader.text =
-                HtmlCompat.fromHtml(cpaasData.msg ?: "", HtmlCompat.FROM_HTML_MODE_LEGACY)
+            tvHeader.text = TemplateText.rich(cpaasData.msg)
             tvChatTemplateTime.text = DateTimeUtils.parseTimestampToTime(message.created_at)
 
             if (cpaasData.is_header_img == "1" && !cpaasData.image_url.isNullOrEmpty()) {
