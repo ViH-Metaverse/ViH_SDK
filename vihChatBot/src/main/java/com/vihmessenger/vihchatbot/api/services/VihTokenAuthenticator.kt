@@ -48,7 +48,12 @@ class VihTokenAuthenticator : Authenticator {
         // Never try to re-authenticate the renewal calls themselves — that would recurse.
         val path = response.request.url.encodedPath
         if (path.endsWith(BaseAPIConstants.USER_SIGNUP_LOGIN) ||
-            path.endsWith(BaseAPIConstants.TOKEN_REFRESH)
+            path.endsWith(BaseAPIConstants.TOKEN_REFRESH) ||
+            // Pre-auth by definition. It should never carry a token, and a 401 from it must
+            // never drive a renewal: doing so rotated the refresh token on every dashboard
+            // load, and a replayed spent token makes the backend revoke the whole family —
+            // which surfaced as users being logged out at random.
+            path.endsWith(BaseAPIConstants.SDK_LOGIN_ATTESTATION_CHALLENGE)
         ) {
             return null
         }
@@ -121,6 +126,8 @@ class VihTokenAuthenticator : Authenticator {
         val request = Request.Builder()
             .url(BuildConfig.API_BASE_URL.trimEnd('/') + "/" + BaseAPIConstants.TOKEN_REFRESH)
             .post(payload.toRequestBody(JSON))
+            // bareClient skips AuthInterceptor, so the device id has to be set here (F-13).
+            .apply { AppController.prefs?.deviceId?.let { header("X-Device-Id", it) } }
             .build()
 
         bareClient.newCall(request).execute().use { res ->
@@ -170,6 +177,8 @@ class VihTokenAuthenticator : Authenticator {
         val request = Request.Builder()
             .url(BuildConfig.API_BASE_URL.trimEnd('/') + "/" + BaseAPIConstants.USER_SIGNUP_LOGIN)
             .post(payload.toRequestBody(JSON))
+            // bareClient skips AuthInterceptor, so the device id has to be set here (F-13).
+            .apply { AppController.prefs?.deviceId?.let { header("X-Device-Id", it) } }
             .build()
 
         bareClient.newCall(request).execute().use { res ->

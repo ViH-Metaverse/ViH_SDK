@@ -4,7 +4,9 @@ import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Bundle
+import com.vihmessenger.vihchatbot.utils.SdkAttestation
 import com.vihmessenger.vihchatbot.utils.VihLog
+import kotlinx.coroutines.launch
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.provider.FontRequest
 import androidx.emoji.text.EmojiCompat
@@ -282,6 +284,7 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
         AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         ensureInitialized(this)
         initAmplify()
+        warmUpAttestation(this)
         networkConnectivityManager = sharedNetworkMonitor(this)
         // SECURITY (VAPT F-14): diagnostics are NOT started here. Bugfender is a third-party
         // remote log/crash processor, and in an SDK embedded in someone else's app that data
@@ -297,6 +300,22 @@ class AppController : Application(),Application.ActivityLifecycleCallbacks {
      * amplifyconfiguration.json, so secrets stay in local.properties. No-ops safely when the
      * pool isn't provisioned for this build, leaving the existing phone login path intact.
      */
+    /**
+     * Warms the Play Integrity token provider off the login path.
+     *
+     * `prepareIntegrityToken` talks to Google and is slow — Google documents it as work to do
+     * ahead of time. Doing it inline at login meant it competed with the sign-in budget and
+     * silently lost, so every login went out unattested. Warming here makes the per-login step
+     * the cheap one.
+     *
+     * Fire-and-forget: a failure here only means the first login pays the cost instead.
+     */
+    private fun warmUpAttestation(context: android.content.Context) {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            runCatching { SdkAttestation.warmUp(context) }
+        }
+    }
+
     private fun initAmplify() {
         val poolId = BuildConfig.COGNITO_USER_POOL_ID
         val clientId = BuildConfig.COGNITO_APP_CLIENT_ID
