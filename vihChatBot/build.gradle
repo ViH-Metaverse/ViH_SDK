@@ -18,7 +18,7 @@ android {
         // AGP 8 strips VERSION_NAME/VERSION_CODE from library BuildConfig. Expose the
         // SDK version explicitly so DeviceTokenRegistrar can include it in the
         // session-registry payload (architecture §3.3).
-        buildConfigField "String", "SDK_VERSION", "\"1.2.4\""
+        buildConfigField "String", "SDK_VERSION", "\"1.2.6\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles "consumer-rules.pro"
@@ -38,6 +38,8 @@ android {
             buildConfigField "String", "DEFAULT_HASHCODE", "\"${localProps.getProperty('PROD_DEFAULT_HASHCODE', '')}\""
             buildConfigField "String", "BUGFENDER_KEY", "\"${localProps.getProperty('BUGFENDER_KEY', '')}\""
             // Cognito (email-OTP auth) — per-environment pool config from local.properties.
+            // Cognito issues and verifies the OTP here; email-login takes the ID token.
+            buildConfigField "Boolean", "USE_BACKEND_EMAIL_OTP", "false"
             buildConfigField "String", "COGNITO_USER_POOL_ID", "\"${localProps.getProperty('PROD_COGNITO_USER_POOL_ID', '')}\""
             buildConfigField "String", "COGNITO_APP_CLIENT_ID", "\"${localProps.getProperty('PROD_COGNITO_APP_CLIENT_ID', '')}\""
             buildConfigField "String", "COGNITO_REGION", "\"${localProps.getProperty('PROD_COGNITO_REGION', 'ap-south-1')}\""
@@ -48,9 +50,40 @@ android {
             buildConfigField "String", "DEFAULT_HASHCODE", "\"${localProps.getProperty('STAGING_DEFAULT_HASHCODE', '')}\""
             buildConfigField "String", "BUGFENDER_KEY", "\"${localProps.getProperty('BUGFENDER_KEY', '')}\""
             // Cognito (email-OTP auth) — per-environment pool config from local.properties.
+            // Cognito issues and verifies the OTP here; email-login takes the ID token.
+            buildConfigField "Boolean", "USE_BACKEND_EMAIL_OTP", "false"
             buildConfigField "String", "COGNITO_USER_POOL_ID", "\"${localProps.getProperty('STAGING_COGNITO_USER_POOL_ID', '')}\""
             buildConfigField "String", "COGNITO_APP_CLIENT_ID", "\"${localProps.getProperty('STAGING_COGNITO_APP_CLIENT_ID', '')}\""
             buildConfigField "String", "COGNITO_REGION", "\"${localProps.getProperty('STAGING_COGNITO_REGION', 'us-east-1')}\""
+        }
+
+        // SaaS developer portal — api.messenger.vihresearchlabs.ai.
+        //
+        // NOTE ON THE BASE URL: the host's API routes live under /developer/, but that
+        // prefix is already part of BaseAPIConstants.SDK_FEATURES, so API_BASE_URL is the
+        // host root. Putting /developer/ in the base URL too yields /developer/developer/…
+        // and 404s (verified 2026-09-16).
+        //
+        // NO CERTIFICATE PIN: this host is on Let's Encrypt (leaf → YE2 → ISRG Root YE),
+        // not ACM like the platform hosts, and LE leaf/intermediate rotation would hard-fail
+        // a pinned client. RetrofitClient pins per-host and falls back to platform trust for
+        // hosts with no entry, which is what applies here.
+        saas {
+            dimension "environment"
+            buildConfigField "String", "API_BASE_URL", "\"${localProps.getProperty('SAAS_API_BASE_URL', 'https://api.messenger.vihresearchlabs.ai/')}\""
+            buildConfigField "String", "DEFAULT_HASHCODE", "\"${localProps.getProperty('SAAS_DEFAULT_HASHCODE', '')}\""
+            buildConfigField "String", "BUGFENDER_KEY", "\"${localProps.getProperty('BUGFENDER_KEY', '')}\""
+            // This backend issues and verifies the login OTP itself over SMTP
+            // (account/request-login-otp/ -> account/email-login/ with email + otp) and
+            // REJECTS a Cognito ID token with 400 EC_VALIDATION_4006. See
+            // docs/MOBILE_OTP_MIGRATION.md.
+            buildConfigField "Boolean", "USE_BACKEND_EMAIL_OTP", "true"
+            // Cognito is unused on this flavour. Left empty on purpose: AppController.initAmplify
+            // and CognitoEmailAuth.isConfigured both gate on these being non-empty, so an empty
+            // pool id means the Amplify Auth plugin is never even registered here.
+            buildConfigField "String", "COGNITO_USER_POOL_ID", "\"\""
+            buildConfigField "String", "COGNITO_APP_CLIENT_ID", "\"\""
+            buildConfigField "String", "COGNITO_REGION", "\"\""
         }
     }
 
@@ -155,6 +188,8 @@ dependencies {
     implementation 'com.vanniktech:emoji-google:0.18.0'
     implementation 'androidx.emoji2:emoji2:1.4.0'
     implementation "com.google.firebase:firebase-messaging:${firebase_messaging_version}"
+    // Device/app attestation for sdk-login. See utils/SdkAttestation.kt.
+    implementation "com.google.android.play:integrity:${play_integrity_version}"
     implementation 'com.bugfender.sdk:android:3.1.1'
 
     // Security - EncryptedSharedPreferences
@@ -211,14 +246,14 @@ afterEvaluate {
                 from components.stagingRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk-staging'
-                version = '1.2.4'   // template line breaks + voicebot barge-in
+                version = '1.2.6'   // sdk-login attestation, device binding, refresh-token rotation
                 applyVihPom(pom)
             }
             prodRelease(MavenPublication) {
                 from components.prodRelease
                 groupId = 'io.github.vihmessenger'
                 artifactId = 'vih-sdk'
-                version = '1.2.4'  // template line breaks + voicebot barge-in
+                version = '1.2.6'  // sdk-login attestation, device binding, refresh-token rotation
                 applyVihPom(pom)
             }
         }

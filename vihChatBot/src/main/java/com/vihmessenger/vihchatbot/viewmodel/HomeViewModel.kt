@@ -9,6 +9,7 @@ import com.vihmessenger.vihchatbot.data.model.EnterPriseDiscoverModel
 import com.vihmessenger.vihchatbot.data.model.IndustryResponse
 import com.vihmessenger.vihchatbot.data.model.EmailLoginRequest
 import com.vihmessenger.vihchatbot.data.model.EmailLoginResponse
+import com.vihmessenger.vihchatbot.data.model.RequestLoginOtpResponse
 import com.vihmessenger.vihchatbot.data.model.SdkFeatureModel
 import com.vihmessenger.vihchatbot.data.model.UserProfileRequest
 import com.vihmessenger.vihchatbot.data.model.UserProfileResponse
@@ -42,6 +43,7 @@ class HomeViewModel(baseActivity: BaseActivity?) : BaseViewModel() {
     val userprofileLiveData = MutableLiveData<UserProfileResponse>()
     val emailLoginLiveData = MutableLiveData<EmailLoginResponse>()
     val emailLoginErrorLiveData = MutableLiveData<String>()
+    val requestLoginOtpLiveData = MutableLiveData<RequestLoginOtpResponse>()
 
     internal val chatListLiveData = MutableLiveData<ChatListModelResponse>()
     internal val enterprisesDiscoverListLiveData = MutableLiveData<EnterPriseDiscoverModel>()
@@ -84,6 +86,39 @@ class HomeViewModel(baseActivity: BaseActivity?) : BaseViewModel() {
     }
 
     /** Exchanges a verified Cognito ID token (+ mobile for delivery) for app-session tokens. */
+    /**
+     * Backend-SMTP OTP login (saas). Posts to the same LiveData as [emailLogin] so the OTP
+     * screen has one observer, but uses the repository path that preserves `error_code` and
+     * does not treat a 401 (wrong/expired code) as session expiry.
+     */
+    fun emailLoginWithOtp(request: EmailLoginRequest) {
+        scope.launch {
+            try {
+                emailLoginLiveData.postValue(homeRepository.emailLoginWithOtp(request))
+            } catch (e: Throwable) {
+                emailLoginErrorLiveData.postValue(e.message ?: "Email login failed")
+                VihLog.e("HomeViewModel", "emailLoginWithOtp failed", e)
+            }
+        }
+    }
+
+    /** Asks the backend to email a login OTP (saas). */
+    fun requestLoginOtp(email: String) {
+        scope.launch {
+            try {
+                requestLoginOtpLiveData.postValue(homeRepository.requestLoginOtp(email))
+            } catch (e: Throwable) {
+                requestLoginOtpLiveData.postValue(
+                    RequestLoginOtpResponse(
+                        status = false,
+                        message = e.message ?: "Couldn't send the code, try again",
+                    )
+                )
+                VihLog.e("HomeViewModel", "requestLoginOtp failed", e)
+            }
+        }
+    }
+
     fun emailLogin(showBlockingLoader: Boolean, request: EmailLoginRequest) {
         scope.launch {
             try {

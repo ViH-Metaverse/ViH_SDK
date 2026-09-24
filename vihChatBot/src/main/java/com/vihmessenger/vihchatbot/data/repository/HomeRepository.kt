@@ -3,7 +3,10 @@ package com.vihmessenger.vihchatbot.data.repository
 import BaseActivity
 import com.vihmessenger.vihchatbot.data.model.EmailLoginRequest
 import com.vihmessenger.vihchatbot.data.model.EmailLoginResponse
+import com.google.gson.Gson
 import com.vihmessenger.vihchatbot.data.model.GenericStatusResponse
+import com.vihmessenger.vihchatbot.data.model.RequestLoginOtpRequest
+import com.vihmessenger.vihchatbot.data.model.RequestLoginOtpResponse
 import com.vihmessenger.vihchatbot.data.model.SubscribeChannelRequest
 import com.vihmessenger.vihchatbot.data.model.SubscribeChannelResponse
 import com.vihmessenger.vihchatbot.data.model.LogoutDataModel
@@ -44,6 +47,54 @@ class HomeRepository(
         return doSafeAPIRequest(
             call = { apiService.emailLogin(body) }, showBlockingLoader = showBlockingLoader
         ) ?: throw NoConnectionException("Failed to complete email login")
+    }
+
+    /**
+     * Backend-SMTP OTP login (saas). Deliberately bypasses [doSafeAPIRequest].
+     *
+     * That helper maps **every** 401 to "Authentication failed" and calls `handleSessionExpired()`,
+     * which clears prefs and bounces to login. On this endpoint 401 is the *normal* answer to a
+     * wrong (EC_AUTH_4014) or expired (EC_AUTH_4015) code — routing that through the session-expiry
+     * path would throw the user out of the OTP screen instead of letting them retype the code. It
+     * also discards `error_code`, which is the only way to tell "wrong code" from "expired code".
+     *
+     * So the error body is parsed into [EmailLoginResponse] and handed to the caller intact.
+     */
+    suspend fun emailLoginWithOtp(body: EmailLoginRequest): EmailLoginResponse {
+        val response = apiService.emailLogin(body)
+        response.body()?.takeIf { response.isSuccessful }?.let { return it }
+        return parseAuthError(response.errorBody()?.string(), "Login failed, please try again")
+    }
+
+    /** Asks the backend to email a login OTP. Same non-throwing error handling as above. */
+    suspend fun requestLoginOtp(email: String): RequestLoginOtpResponse {
+        val response = apiService.requestLoginOtp(RequestLoginOtpRequest(email = email))
+        response.body()?.takeIf { response.isSuccessful }?.let { return it }
+        // 429 is throttling (5/min) and carries no JSON body worth showing.
+        if (response.code() == 429) {
+            return RequestLoginOtpResponse(
+                status = false, message = "Too many requests, wait a minute"
+            )
+        }
+        val parsed = parseAuthError(response.errorBody()?.string(), "Couldn't send the code, try again")
+        return RequestLoginOtpResponse(
+            status = false, message = parsed.message, error_code = parsed.error_code
+        )
+    }
+
+    /**
+     * Parses a DRF `{status, message, error_code}` error body. A non-JSON body (an HTML 502 page,
+     * say) must not surface a Gson stack trace to the user, so it falls back to [fallback].
+     */
+    private fun parseAuthError(body: String?, fallback: String): EmailLoginResponse {
+        val parsed = body?.takeIf { it.isNotBlank() }?.let {
+            runCatching { Gson().fromJson(it, EmailLoginResponse::class.java) }.getOrNull()
+        }
+        return EmailLoginResponse(
+            status = false,
+            message = parsed?.message?.takeIf { it.isNotBlank() } ?: fallback,
+            error_code = parsed?.error_code,
+        )
     }
 
     /** Subscribes the authenticated user to a channel (Settings hashkey switch). */

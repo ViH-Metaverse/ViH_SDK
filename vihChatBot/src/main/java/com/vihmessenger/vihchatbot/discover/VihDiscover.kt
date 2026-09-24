@@ -13,6 +13,8 @@ import com.vihmessenger.vihchatbot.config.VihTabId
 import com.vihmessenger.vihchatbot.constants.AppConstants
 import com.vihmessenger.vihchatbot.data.model.EnterPriseModel
 import com.vihmessenger.vihchatbot.data.model.UserProfileRequest
+import com.vihmessenger.vihchatbot.utils.SdkAttestation
+import com.vihmessenger.vihchatbot.data.model.withAttestation
 import com.vihmessenger.vihchatbot.services.DeviceTokenRegistrar
 import com.vihmessenger.vihchatbot.ui.activity.home.ChatActivity
 import com.vihmessenger.vihchatbot.utils.FloatingButtonView
@@ -172,8 +174,17 @@ object VihDiscover {
                     prefs.accessToken = null
                     prefs.refreshToken = null
 
+                    // Attestation (VIH-SA-2026-09 H-3). Best-effort: a host on a device
+                    // without Play Services still signs in, and the backend decides whether an
+                    // unattested request is acceptable.
+                    val attestation = SdkAttestation.acquire(appContext, hashcode)
                     ApiClient.apiService.createUserProfile(
-                        UserProfileRequest(phone, hashcode, prefs.fcmToken ?: "")
+                        UserProfileRequest(
+                            phone,
+                            hashcode,
+                            prefs.fcmToken ?: "",
+                            device_id = prefs.deviceId,
+                        ).withAttestation(attestation)
                     )
                 }
                 val body = response.body()

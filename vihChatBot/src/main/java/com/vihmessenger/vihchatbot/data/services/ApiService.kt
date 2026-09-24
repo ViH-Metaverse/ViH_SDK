@@ -11,6 +11,8 @@ import com.vihmessenger.vihchatbot.data.model.EnterpriseApiResponse
 import com.vihmessenger.vihchatbot.data.model.GenericStatusResponse
 import com.vihmessenger.vihchatbot.data.model.IndustryResponse
 import com.vihmessenger.vihchatbot.data.model.EmailLoginRequest
+import com.vihmessenger.vihchatbot.data.model.RequestLoginOtpRequest
+import com.vihmessenger.vihchatbot.data.model.RequestLoginOtpResponse
 import com.vihmessenger.vihchatbot.data.model.EmailLoginResponse
 import com.vihmessenger.vihchatbot.data.model.SubscribeChannelRequest
 import com.vihmessenger.vihchatbot.data.model.SubscribeChannelResponse
@@ -56,6 +58,12 @@ interface ApiService : BaseApiService {
     // tokens or account_status == "needs_profile".
     @POST(BaseAPIConstants.EMAIL_LOGIN)
     suspend fun emailLogin(@Body body: EmailLoginRequest): Response<EmailLoginResponse>
+
+    // Backend-SMTP OTP issuance (saas). Throttled 5/min server-side.
+    @POST(BaseAPIConstants.REQUEST_LOGIN_OTP)
+    suspend fun requestLoginOtp(
+        @Body body: RequestLoginOtpRequest
+    ): Response<RequestLoginOtpResponse>
 
     // Subscribe the authenticated user to a channel (Settings hashkey switch).
     @POST(BaseAPIConstants.SUBSCRIBE_CHANNEL)

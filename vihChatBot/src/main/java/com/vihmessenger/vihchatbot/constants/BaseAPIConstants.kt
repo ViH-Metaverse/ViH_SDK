@@ -15,11 +15,34 @@ object BaseAPIConstants {
     const val MAIN_CHAT_LIST = "main/get-user-session/"
     const val MAIN_DISCOVER_LIST = "main/enterprises/"
     const val USER_PROFILE = "account/profile/"
-    const val USER_SIGNUP_LOGIN = "account/signup-login/"
+    // Passwordless SDK sign-in. `account/sdk-login/` and the older `account/signup-login/`
+    // map to the same backend view; sdk-login is the current name and the one new work should
+    // target. signup-login survives only because APKs already in the field POST there.
+    const val USER_SIGNUP_LOGIN = "account/sdk-login/"
 
-    // Email-OTP token exchange: client posts a verified Cognito ID token (+ mobile for
-    // hashcode-matched delivery) and receives the existing app-session tokens.
+    // Single-use, channel-bound nonce for the attestation on sdk-login. TTL 120s, throttled
+    // 30/min per client. Fetch it immediately before requesting the integrity token — not at
+    // app start — because the nonce is redeemed before verification, so one nonce is one login
+    // attempt and a retry needs a fresh challenge.
+    const val SDK_LOGIN_ATTESTATION_CHALLENGE = "account/sdk-login/attestation-challenge/"
+
+    // Refresh-token exchange. Takes {"refresh": "<token>"} and returns {"access": "<token>"} —
+    // access only, the refresh token is not rotated. Verified live on api.platform,
+    // api.prod.platform and api.messenger (2026-09-23).
+    //
+    // This is what 401 recovery uses now. Previously the only way to renew was to re-run
+    // account/signup-login/, which meant every shipped client depended on that endpoint
+    // minting a session from {mobile, channel_id} alone — the thing the backend needs to be
+    // able to restrict. See docs/backend-security-work.md.
+    const val TOKEN_REFRESH = "account/token/refresh/"
+
+    // Email-OTP login. Two backend generations share this route — Cognito backends take a
+    // verified Cognito ID token, backend-SMTP backends take email + otp. See EmailLoginRequest.
     const val EMAIL_LOGIN = "account/email-login/"
+
+    // Backend-SMTP OTP issuance (saas flavour only; 404 on the Cognito backends). Asks the
+    // server to email a 6-digit code, valid 10 minutes, single-use, one live code per account.
+    const val REQUEST_LOGIN_OTP = "account/request-login-otp/"
 
     // Subscribe the current authenticated user to a channel (used when switching the
     // channel hashkey in Settings — login already subscribes).

@@ -47,6 +47,7 @@ import com.vihmessenger.vihchatbot.config.VihConfigStore
 import com.vihmessenger.vihchatbot.config.VihTab
 import com.vihmessenger.vihchatbot.config.VihTabId
 import com.vihmessenger.vihchatbot.constants.AppConstants
+import com.vihmessenger.vihchatbot.data.model.withAttestation
 import com.vihmessenger.vihchatbot.data.model.UserProfileRequest
 import com.vihmessenger.vihchatbot.databinding.FragmentDashboardBinding
 import com.vihmessenger.vihchatbot.services.ShortcutPinnedReceiver
@@ -200,12 +201,23 @@ class DashboardFragment : BaseFragment(), OnBackPressedListener {
     private fun refreshUserSession() {
         val phoneNumber = arguments?.getString(AppConstants.PHONENUMBER) ?: return
         val hashCode = arguments?.getString(AppConstants.HASHCODE_EXTRA) ?: return
-        val profileRequest = UserProfileRequest(
-            phoneNumber,
-            hashCode,
-            fcm_token = fcmToken ?: ""
-        )
-        homeViewModel.getUserProfile(false, profileRequest)
+        val context = context?.applicationContext ?: return
+
+        // Attach a device/app attestation when one can be produced (VIH-SA-2026-09 H-3).
+        // SdkAttestation is best-effort and time-bounded, so a device without Play Services or
+        // a slow integrity provider degrades to an unattested sign-in rather than blocking the
+        // dashboard. Once the backend enforces attestation it refuses those, which is correct.
+        lifecycleScope.launch {
+            val attestation = com.vihmessenger.vihchatbot.utils.SdkAttestation
+                .acquire(context, hashCode)
+            val profileRequest = UserProfileRequest(
+                phoneNumber,
+                hashCode,
+                fcm_token = fcmToken ?: "",
+                device_id = prefs.deviceId,
+            ).withAttestation(attestation)
+            homeViewModel.getUserProfile(false, profileRequest)
+        }
     }
 
     override fun setListeners() {
